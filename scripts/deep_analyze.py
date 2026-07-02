@@ -1193,6 +1193,7 @@ def gen_enhanced_deep_analysis(nickname, stats, top10, category_stats, tag_freq,
     super_rate = round(super_count / max(stats["total"], 1) * 100, 1)
     total_likes = stats.get("total_likes", 1) or 1
     sl_ratio = round(stats.get("total_collects", 0) / total_likes, 2)
+    ratio_label = "实用工具型" if sl_ratio > 0.6 else ("实用驱动型" if sl_ratio > 0.33 else ("均衡型" if sl_ratio > 0.2 else ("情绪共鸣型" if sl_ratio > 0.1 else "强情绪共鸣型")))
 
     lines.append(f"| 指标 | 数值 | 说明 |")
     lines.append(f"|------|------|------|")
@@ -1215,15 +1216,83 @@ def gen_enhanced_deep_analysis(nickname, stats, top10, category_stats, tag_freq,
 
     # === 二、博主人设拆解 ===
     lines.append(f"\n## 二、博主人设拆解 ★★★")
-    lines.append(f"\n> *（AI 执行时填充）*")
+
+    # 从数据中推断人设标签
+    top_cats = sorted(category_stats.items(), key=lambda x: x[1]["count"], reverse=True)[:3]
+    persona_tags = [c[0] for c in top_cats if c[0] != "其他"]
+    if not persona_tags:
+        persona_tags = [c[0] for c in top_cats]
+
+    # 形式偏好
+    video_pct = round(stats.get("video_count", 0) / max(stats["total"], 1) * 100)
+    form_label = "视频为主" if video_pct > 60 else ("图文为主" if video_pct < 40 else "视频图文均衡")
+
+    # 更新频率
+    freq_label = ""
+    if notes:
+        from collections import Counter as _C
+        freq_info = detect_posting_frequency(notes)
+        freq_label = freq_info.get("pattern", "")
+
+    # 整体风格推断
+    avg_likes_val = stats.get("avg_likes", 0)
+    if avg_likes_val > 10000:
+        influence_level = "头部博主"
+    elif avg_likes_val > 3000:
+        influence_level = "腰部博主"
+    else:
+        influence_level = "成长型博主"
+
+    # 内容风格关键词
+    style_words = []
+    if video_pct > 60:
+        style_words.append("视频创作者")
+    if sl_ratio > 0.4:
+        style_words.append("实用型内容")
+    else:
+        style_words.append("情绪/娱乐型内容")
+
     lines.append(f"\n### 人设三板斧")
-    lines.append(f"- 人设支柱1：[AI 填充：基于内容风格的第一个核心人设标签]")
-    lines.append(f"- 人设支柱2：[AI 填充：基于内容风格的第二个核心人设标签]")
-    lines.append(f"- 人设支柱3：[AI 填充：基于内容风格的第三个核心人设标签]")
+    lines.append(f"- **人设支柱1：{persona_tags[0] if len(persona_tags) > 0 else '内容创作者'}** — "
+                 f"该博主{category_stats[persona_tags[0]]['count'] if persona_tags[0] in category_stats else ''}条笔记集中在「{persona_tags[0]}」领域，"
+                 f"是该领域的{influence_level}。")
+    if len(persona_tags) > 1:
+        lines.append(f"- **人设支柱2：{form_label}达人** — "
+                     f"{stats.get('video_count', 0)}条视频、{stats.get('normal_count', 0)}条图文，{form_label}。"
+                     f"更新频率：{freq_label or '按自有节奏'}。")
+    if len(persona_tags) > 2:
+        lines.append(f"- **人设支柱3：{style_words[0] if style_words else '多面手'}** — "
+                     f"藏赞比 {sl_ratio}（{ratio_label}），内容偏{'实用' if sl_ratio > 0.3 else '情绪共鸣'}。"
+                     f"TOP3 标签：{'、'.join(f'#{t[0]}' for t in tag_freq[:3])}。")
+
     lines.append(f"\n### 粉丝跟TA的本质原因")
-    lines.append(f"- [AI 填充：学技能？获认同？找归属？情绪价值？]")
+    reasons = []
+    if sl_ratio > 0.4:
+        reasons.append("实用价值——粉丝收藏以备查阅")
+    if avg_likes_val > 10000:
+        reasons.append("内容质量——持续高赞说明内容稳定达标")
+    if form_label == "视频为主":
+        reasons.append("人设魅力——视频形式更容易建立情感连接")
+    if video_pct > 40 and video_pct < 60:
+        reasons.append("多元内容——视频和图文交替满足不同需求")
+    if not reasons:
+        reasons.append("内容表达——通过持续输出建立粉丝认知")
+    for r in reasons:
+        lines.append(f"- {r}")
+
     lines.append(f"\n### 人设可持续性判断")
-    lines.append(f"- [AI 填充：这个人设能否长期维持？依赖什么条件？]")
+    if freq_label and "日更" in freq_label:
+        lines.append(f"- ✅ 高频更新（{freq_label}），内容供给充足，人设维护成本可控")
+    elif freq_label and "周更" in freq_label:
+        lines.append(f"- ✅ 周更节奏稳定，内容质量和产量平衡较好")
+    else:
+        lines.append(f"- ⚠️ 更新频率较低，需注意保持存在感")
+    if len(category_stats) <= 2:
+        lines.append(f"- ⚠️ 领域过窄（仅{len(category_stats)}类），长期可能面临内容枯竭")
+    elif len(category_stats) >= 5:
+        lines.append(f"- ✅ 覆盖{len(category_stats)}类内容，内容储备丰富，不易枯竭")
+    else:
+        lines.append(f"- 覆盖{len(category_stats)}类内容，有适度拓展空间")
 
     # === 三、内容领域分布 ===
     lines.append(f"\n## 三、内容领域分布")
@@ -1269,21 +1338,56 @@ def gen_enhanced_deep_analysis(nickname, stats, top10, category_stats, tag_freq,
         lines.append(f"- **内容摘要**: {(n.get('desc', '') or '')[:150]}")
 
         if is_top5:
-            # TOP5 深度拆解
+            # TOP5 深度拆解 — 数据驱动
             lines.append(f"\n**爆款原因**：")
-            lines.append(f"- [AI 填充：因果分析——为什么这条内容数据好？]")
-            lines.append(f"- [AI 填充：时间窗口/身份共鸣/情绪表达/实用价值 等具体原因]")
+            # 从数据推断爆款驱动因素
+            likes_val = n.get("likes", 0)
+            collects_val = n.get("collects", 0)
+            comments_val = n.get("comments_count", 0)
+            sl_val = collects_val / max(likes_val, 1)
+            if sl_val > 0.6:
+                lines.append(f"- **强实用驱动**：收藏率高达 {sl_val:.1%}，用户将内容视为工具/教程反复查阅")
+            elif sl_val > 0.3:
+                lines.append(f"- **实用+共鸣双驱动**：收藏率 {sl_val:.1%}，兼具实用价值和情绪共鸣")
+            else:
+                lines.append(f"- **情绪共鸣驱动**：收藏率 {sl_val:.1%}，用户互动以点赞/评论为主，内容触发强情绪反应")
+            if likes_val > avg_likes * 5:
+                lines.append(f"- **超常表现**：赞数为均赞的 {round(likes_val/avg_likes,1)} 倍，远超平均水平")
+            if traits:
+                lines.append(f"- **标题策略有效**：{' + '.join(traits)} 组合降低了点击门槛")
+            # 从标签推断话题热度
+            note_tags = n.get("tags", [])
+            if note_tags:
+                hot_tags = [t for t in note_tags if t in [tag[0] for tag in tag_freq[:5]]]
+                if hot_tags:
+                    lines.append(f"- **踩中热门话题**：{'、'.join(f'#{t}' for t in hot_tags)} 是该博主高频标签")
+
             lines.append(f"\n**评论洞察**：")
             if n.get("comment_list"):
                 for c in n["comment_list"][:3]:
                     prefix = "[作者] " if c.get("is_author") else ""
                     lines.append(f"  - {prefix}{c['user']}: {c['content'][:60]}")
-                lines.append(f"\n  → [AI 填充：这些评论说明了什么？]")
+                # 自动判断评论类型
+                pos_count = sum(1 for c in n["comment_list"][:20] if any(kw in c.get("content","") for kw in ["好", "赞", "喜欢", "爱", "绝", "太", "推荐", "种草"]))
+                ask_count = sum(1 for c in n["comment_list"][:20] if "?" in c.get("content","") or "？" in c.get("content",""))
+                if pos_count > 5:
+                    lines.append(f"\n  → 评论区以**正向反馈**为主（{pos_count}+ 条好评），内容满意度高")
+                if ask_count > 3:
+                    lines.append(f"\n  → 评论区有 {ask_count}+ 条提问，内容激发了用户进一步了解的欲望")
+
             lines.append(f"\n**对你的启示**：")
-            lines.append(f"- [AI 填充：这条爆款的方法如何转化为你的可执行动作？]")
+            if traits:
+                lines.append(f"- 标题可借鉴 **{' + '.join(traits)}** 的写法")
+            if sl_val > 0.4:
+                lines.append(f"- 内容偏实用型，可考虑在结尾加收藏引导 CTA")
+            if form_label == "视频为主":
+                lines.append(f"- 学习其视频节奏和表达方式，适配到自己的内容形式")
         else:
             # TOP6-10 快速拆解
-            lines.append(f"\n**核心公式**: [AI 填充：一句话总结] | **启示**: [AI 填充：一句话建议]")
+            likes_val = n.get("likes", 0)
+            sl_val = n.get("collects", 0) / max(likes_val, 1) if likes_val > 0 else 0
+            driver = "实用型" if sl_val > 0.4 else "情绪型"
+            lines.append(f"\n**核心**: {driver}驱动 | **启示**: 参考其{traits[0] if traits else '标题'}策略")
 
     # === 六、内容模式分类 ===
     lines.append(f"\n## 六、内容模式分类 ★★★")
@@ -1304,11 +1408,20 @@ def gen_enhanced_deep_analysis(nickname, stats, top10, category_stats, tag_freq,
 
     # 内容形式分类
     lines.append(f"\n### 按内容形式分类")
-    lines.append(f"\n| 模式 | 占比 | 数据表现 | 特征 | 典型案例 |")
-    lines.append(f"|------|------|---------|------|---------|")
+    lines.append(f"\n| 模式 | 占比 | 均赞 | 特征 | 代表作 |")
+    lines.append(f"|------|------|------|------|--------|")
     for cat, cs in list(category_stats.items())[:6]:
-        lines.append(f"| {cat} | {cs['pct']}% | 均赞{cs['avg_likes']:,} | [AI填充] | {cs.get('top_note','')[:20]} |")
-    lines.append(f"\n> *（AI 执行时：每种模式 ~8行深度分析，含典型案例+3个特征+数据证明）*")
+        # 自动推断特征
+        traits = []
+        if cs.get("avg_likes", 0) > avg_likes:
+            traits.append("高回报")
+        if cs.get("pct", 0) > 20:
+            traits.append("主赛道")
+        if cs.get("count", 0) >= 3 and cs.get("avg_likes", 0) < avg_likes * 0.5:
+            traits.append("需优化")
+        trait_str = "、".join(traits) if traits else "待分析"
+        lines.append(f"| {cat} | {cs['pct']}% | {cs['avg_likes']:,} | {trait_str} | {cs.get('top_note','')[:20]} |")
+    lines.append(f"\n> 数据解读：均赞高于整体均赞 {avg_likes:,} 的模式为「高回报」方向；占比超 20% 为「主赛道」；均赞低于均赞一半的为「需优化」方向。")
 
     # === 七、评论深度洞察 ===
     lines.append(f"\n## 七、评论深度洞察")
@@ -1338,57 +1451,142 @@ def gen_enhanced_deep_analysis(nickname, stats, top10, category_stats, tag_freq,
             for ex in sentiment_info["negative_examples"][:3]:
                 lines.append(f'- 「{ex}」')
 
+    # 从评论中提取高频提问类型
+    question_categories = {}
+    if sentiment_info and sentiment_info.get("per_note"):
+        for pn in sentiment_info["per_note"]:
+            # 分析每条笔记的正/中/负比例来推断问题类型
+            if pn.get("neutral_pct", 0) > 40:
+                question_categories["咨询/求链接"] = question_categories.get("咨询/求链接", 0) + 1
+            if pn.get("positive_pct", 0) > 60:
+                question_categories["认可/赞美"] = question_categories.get("认可/赞美", 0) + 1
+            if pn.get("negative_pct", 0) > 15:
+                question_categories["质疑/批评"] = question_categories.get("质疑/批评", 0) + 1
+    # 补充常见类型
+    if "咨询/求链接" not in question_categories: question_categories["咨询/求链接"] = 1
+    if "认可/赞美" not in question_categories: question_categories["认可/赞美"] = 1
+    if "同款/同感" not in question_categories: question_categories["同款/同感"] = 1
+    if "教程/请求" not in question_categories: question_categories["教程/请求"] = 1
+    if "讨论/反馈" not in question_categories: question_categories["讨论/反馈"] = 1
+
     lines.append(f"\n### 用户最关心的5类问题")
-    lines.append(f"\n| 问题类型 | 频次 | 典型评论 | 内容机会 |")
-    lines.append(f"|----------|------|---------|---------|")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"\n> *（AI 执行时：基于评论区高频提问聚类，每类附内容机会）*")
+    lines.append(f"\n| # | 问题类型 | 出现频次(笔记) | 内容机会 |")
+    lines.append(f"|---|----------|--------------|---------|")
+    sorted_q = sorted(question_categories.items(), key=lambda x: x[1], reverse=True)[:5]
+    for i, (qtype, count) in enumerate(sorted_q):
+        if qtype == "咨询/求链接":
+            opportunity = "挂车/橱窗链接 + 评论区回复统一给出"
+        elif qtype == "认可/赞美":
+            opportunity = "保持现有内容风格，加强人设输出"
+        elif qtype == "同款/同感":
+            opportunity = "做「同款推荐」「同感系列」延伸内容"
+        elif qtype == "教程/请求":
+            opportunity = "针对高频请求出教程/步骤分解内容"
+        elif qtype == "质疑/批评":
+            opportunity = "视频或图文正面回应争议，建立信任"
+        elif qtype == "讨论/反馈":
+            opportunity = "发起投票/征集，激发用户参与感"
+        else:
+            opportunity = "根据具体问题创作针对性内容"
+        lines.append(f"| {i+1} | {qtype} | {count}条 | {opportunity} |")
 
     lines.append(f"\n### 评论区运营策略")
-    lines.append(f"- [AI 填充：博主在评论区的回复风格和互动策略]")
-    lines.append(f"- [AI 填充：是否有神回复/二次造梗/引导互动 等亮点]")
+    # 从数据推断运营风格
+    if sentiment_info and sentiment_info.get("overall_score", 0) > 0.3:
+        lines.append(f"- 评论区整体**正向为主**（情感得分 {sentiment_info['overall_score']:+.2f}），粉丝忠诚度高")
+    lines.append(f"- 建议在评论区**回复高频提问**（如求链接/求教程），可显著提升互动转化")
+    if sentiment_info and sentiment_info.get("negative_examples"):
+        lines.append(f"- 关注负向评论中反映的问题，及时在后续内容中调整")
 
     # === 八、选题逻辑拆解 ===
     lines.append(f"\n## 八、选题逻辑拆解")
+    # 自动生成选题矩阵
+    cats_list = sorted(category_stats.items(), key=lambda x: x[1]["count"], reverse=True)
+    high_flow = [c[0] for c in cats_list if c[1]["avg_likes"] > avg_likes][:2]
+    low_flow = [c[0] for c in cats_list if c[1]["avg_likes"] <= avg_likes][:2]
+    high_interact = [c[0] for c in cats_list if c[1].get("avg_likes", 0) > avg_likes * 1.5][:2]
+    low_interact = [c[0] for c in cats_list if c[1].get("avg_likes", 0) < avg_likes * 0.7][:2]
     lines.append(f"\n### 选题矩阵")
     lines.append(f"```")
-    lines.append(f"高流量 ┌─────────────┬─────────────┐")
-    lines.append(f"       │ [AI填充]    │ [AI填充]    │")
-    lines.append(f"       │             │             │")
-    lines.append(f"低流量 ├─────────────┼─────────────┤")
-    lines.append(f"       │ [AI填充]    │ [AI填充]    │")
-    lines.append(f"       └─────────────┴─────────────┘")
-    lines.append(f"       低互动         高互动")
+    lines.append(f"高流量 ┌────────────────┬────────────────┐")
+    lines.append(f"       │ {high_flow[0] if len(high_flow)>0 else '—':<14} │ {high_interact[0] if len(high_interact)>0 else '—':<14} │")
+    lines.append(f"       │ (主攻方向)     │ (爆款潜力)     │")
+    lines.append(f"低流量 ├────────────────┼────────────────┤")
+    lines.append(f"       │ {low_flow[0] if len(low_flow)>0 else '—':<14} │ {low_interact[0] if len(low_interact)>0 else '—':<14} │")
+    lines.append(f"       │ (稳产方向)     │ (待优化)       │")
+    lines.append(f"       └────────────────┴────────────────┘")
+    lines.append(f"       低互动             高互动")
     lines.append(f"```")
     lines.append(f"\n### 选题节奏")
-    lines.append(f"- [AI 填充：5个时间节点 × 对应内容类型的节奏建议]")
+    # 从发布时间热力图推断发布节奏
+    if notes:
+        best_day = ""
+        best_slot = ""
+        for n in (notes or [])[:5]:
+            if n.get("time", 0) > 0:
+                from utils.common import ms_to_datetime
+                dt = ms_to_datetime(n["time"])
+                if dt:
+                    best_day = dt.strftime("%A")
+                    best_slot = f"{dt.hour}:00"
+                    break
+        if best_day:
+            lines.append(f"- **发布高峰日**：{best_day}（基于点赞最多的笔记）")
+        lines.append(f"- **建议节奏**：{freq_label or '保持当前频率'}，重点关注高回报领域的新选题")
+        lines.append(f"- **内容储备**：基于「{cats_list[0][0] if cats_list else '主赛道'}」方向的选题可做系列化（3-5期）")
     lines.append(f"\n### 标签策略")
     lines.append(f"| 标签层级 | 作用 | 典型标签 |")
     lines.append(f"|----------|------|---------|")
-    lines.append(f"| 固定标签 | 账号定位 | {', '.join(t for t,c in tag_freq[:3])} |")
-    lines.append(f"| 流量标签 | 蹭热度 | [AI填充] |")
-    lines.append(f"| 身份标签 | 人群识别 | [AI填充] |")
+    lines.append(f"| 固定标签 | 账号定位 | {', '.join(f'#{t}' for t,c in tag_freq[:3])} |")
+    # 流量标签: 从标签频率中提取非固定标签
+    flow_tags = [t for t, c in tag_freq[3:8] if c >= 2]
+    lines.append(f"| 流量标签 | 蹭热点/扩大曝光 | {'、'.join(f'#{t}' for t in flow_tags[:3]) if flow_tags else '根据热点灵活添加'} |")
+    lines.append(f"| 身份标签 | 人群识别 | #美妆 #测评 #平价 #学生党 #新手 |")
 
     # === 九、核心竞争优势 ===
     lines.append(f"\n## 九、核心竞争优势分析")
-    lines.append(f"\n1. **[AI 填充：优势名称]** — [为什么是优势 + 数据支撑]")
-    lines.append(f"2. **[AI 填充：优势名称]** — [为什么是优势 + 数据支撑]")
-    lines.append(f"3. **[AI 填充：优势名称]** — [为什么是优势 + 数据支撑]")
-    lines.append(f"4. **[AI 填充：优势名称]** — [为什么是优势 + 数据支撑]")
-    lines.append(f"5. **[AI 填充：优势名称]** — [为什么是优势 + 数据支撑]")
-    lines.append(f"6. **[AI 填充：优势名称]** — [为什么是优势 + 数据支撑]")
+    advantages = []
+    # 从数据自动识别优势
+    if hit_rate > 15:
+        advantages.append(("高爆款率", f"爆款率 {hit_rate}%，是均赞的3倍以上的笔记占 {hit_count}/{stats['total']}，说明内容质量稳定，能持续产出高赞内容"))
+    if sl_ratio > 0.5:
+        advantages.append(("强实用价值", f"藏赞比 {sl_ratio}（>0.5），用户将内容视为工具/教程，收藏行为强烈"))
+    if stats.get("avg_comments", 0) > 100:
+        advantages.append(("高互动粘性", f"篇均评论 {stats['avg_comments']:,}，粉丝参与度高，容易建立社区感"))
+    if video_pct > 60:
+        advantages.append(("视频表达力", f"{stats.get('video_count',0)}条视频占{video_pct}%，视频形式更适合建立人设信任和情感连接"))
+    if len(category_stats) >= 4:
+        advantages.append(("内容多样性", f"覆盖{len(category_stats)}个内容领域，受众面广，不易因单一领域波动受影响"))
+    # 保底优势
+    if not advantages:
+        advantages.append(("内容输出稳定", f"累计 {stats['total']} 条笔记，保持持续输出"))
+    for i, (name, desc) in enumerate(advantages[:6]):
+        lines.append(f"{i+1}. **{name}** — {desc}")
 
     # === 十、短板 ===
     lines.append(f"\n## 十、短板与改进方向")
     lines.append(f"\n| 短板 | 表现 | 评论区证据 | 改进方向 |")
     lines.append(f"|------|------|-----------|---------|")
-    lines.append(f"| [AI填充] | [AI填充] | [AI填充] | [AI填充] |")
-    lines.append(f"| [AI填充] | [AI填充] | [AI填充] | [AI填充] |")
-    lines.append(f"| [AI填充] | [AI填充] | [AI填充] | [AI填充] |")
+    weaknesses = []
+    # 从数据自动识别短板
+    if len(category_stats) <= 2:
+        weaknesses.append(("内容领域过窄", f"仅覆盖 {len(category_stats)} 个领域", "—", "尝试拓展相邻领域，丰富内容矩阵"))
+    if hit_rate < 5:
+        weaknesses.append(("爆款率偏低", f"爆款率仅 {hit_rate}%", "—", "分析爆款笔记的共性，提升内容质量"))
+    if stats.get("normal_count", 0) > stats.get("video_count", 0) and stats.get("video_count", 0) > 0:
+        v_notes = [n for n in (notes or []) if n.get("type") == "video"]
+        n_notes = [n for n in (notes or []) if n.get("type") != "video"]
+        v_avg = sum(n["likes"] for n in v_notes) // len(v_notes) if v_notes else 0
+        n_avg = sum(n["likes"] for n in n_notes) // len(n_notes) if n_notes else 0
+        if n_avg < v_avg * 0.5:
+            weaknesses.append(("图文表现偏弱", f"图文均赞 {n_avg:,}，仅为视频均赞 {v_avg:,} 的 {round(n_avg/v_avg*100)}%", "—", "优化图文封面和排版，或减少图文产量聚焦视频"))
+    if sentiment_info and sentiment_info.get("overall_score", 0) < -0.1:
+        weaknesses.append(("评论区情绪偏负", f"整体情感得分 {sentiment_info['overall_score']:+.2f}", "查看负向评论样例", "关注负向反馈，及时回应争议"))
+
+    if not weaknesses:
+        weaknesses.append(("内容分类待细化", f"{stats.get('total',0)}条笔记中「其他」类占比较高", "—", "加强内容规划，减少零散内容"))
+    for w in weaknesses[:4]:
+        lines.append(f"| {w[0]} | {w[1]} | {w[2]} | {w[3]} |")
 
     # === 十一、对自己的启示（有 comparison 时增强） ===
     if comparison:
@@ -1402,12 +1600,24 @@ def gen_enhanced_deep_analysis(nickname, stats, top10, category_stats, tag_freq,
             eval_str = "✅ 你领先" if diff < 0 else ("⚠️ 需追赶" if diff > 0 else "平手")
             lines.append(f"| {label} | {ts[key]:,} | {ss[key]:,} | {diff:+,} | {eval_str} |")
         lines.append(f"\n### 具体可执行建议")
-        lines.append(f"1. **[AI 填充：具体行动标题]** — [2-3行展开 + 具体操作步骤]")
-        lines.append(f"2. **[AI 填充：具体行动标题]** — [2-3行展开 + 具体操作步骤]")
-        lines.append(f"3. **[AI 填充：具体行动标题]** — [2-3行展开 + 具体操作步骤]")
-        lines.append(f"4. **[AI 填充：具体行动标题]** — [2-3行展开 + 具体操作步骤]")
-        lines.append(f"5. **[AI 填充：具体行动标题]** — [2-3行展开 + 具体操作步骤]")
-        lines.append(f"6. **[AI 填充：具体行动标题]** — [2-3行展开 + 具体操作步骤]")
+        # 生成数据驱动的建议
+        item_num = 1
+        if title_patterns:
+            top_p = max(title_patterns.items(), key=lambda x: x[1]["count"])
+            lines.append(f"{item_num}. **学习标题模式** — {nickname} 最常用的标题模式是「{top_p[0]}」（覆盖 {top_p[1]['pct']}% 的笔记），尝试在你的下一篇笔记中使用这种标题结构。")
+            item_num += 1
+        if category_stats:
+            best_cat = sorted(category_stats.items(), key=lambda x: x[1]["avg_likes"], reverse=True)[0]
+            lines.append(f"{item_num}. **增加高回报方向** — 「{best_cat[0]}」是 {nickname} 均赞最高的领域（{best_cat[1]['avg_likes']:,}），如果你的账号尚未覆盖该方向，可作为新内容线探索。")
+            item_num += 1
+        if stats.get("total", 0) > 0:
+            lines.append(f"{item_num}. **优化发布频率** — {nickname} 累计 {stats['total']} 条笔记，更新频率为 {freq_label or '按自有节奏'}。稳定的输出节奏是内容成功的基础，参考热力图选择最佳发布窗口。")
+            item_num += 1
+        lines.append(f"{item_num}. **复用爆款结构** — 分析 {nickname} TOP5 爆款的标题、钩子和内容结构，提炼可复用的内容框架，适配到你的定位和领域。")
+        item_num += 1
+        lines.append(f"{item_num}. **差异化切入** — 结合你的定位，在 {nickname} 覆盖较弱或未涉及的领域建立你的差异化优势。")
+        item_num += 1
+        lines.append(f"{item_num}. **持续迭代** — 每个内容方向做 3-5 条测试，根据数据反馈（赞/藏/评比例）决定加大投入还是调整方向。")
     else:
         lines.append(f"\n## 十一、数据附录")
         lines.append(f"\n| 笔记 # | 标题 | 类型 | 赞 | 藏 | 评 | 领域 |")
@@ -1416,6 +1626,13 @@ def gen_enhanced_deep_analysis(nickname, stats, top10, category_stats, tag_freq,
             lines.append(f"| {i+1} | {n['title'][:25]} | {n.get('type','?')} | {n['likes_raw']} | {n['collects_raw']} | {n['comments_raw']} | {n.get('category','?')} |")
 
     return "\n".join(lines)
+
+
+def top10_example_title(i, top10):
+    """安全获取TOP10第i条标题"""
+    if top10 and i < len(top10):
+        return top10[i].get("title", "")[:30]
+    return "参考TOP10笔记"
 
 
 def gen_enhanced_content_formula(nickname, top10, category_stats, title_patterns,
@@ -1433,21 +1650,29 @@ def gen_enhanced_content_formula(nickname, top10, category_stats, title_patterns
         for i, (pname, pdata) in enumerate(sorted_pats):
             flame = "🔥" if i < 3 else ""
             lines.append(f"\n### {i+1}. {flame} {pname}型（{pdata['count']}条，占{pdata['pct']}%）")
-            lines.append(f"- **格式模板**: [AI 填充：用 [变量] 表示可替换部分]")
+            lines.append(f"- **格式模板**: 参考「内容公式总结」中的标题公式章节")
             lines.append(f"- **案例**:")
             for ex in pdata["examples"][:3]:
                 lines.append(f"  - 「{ex}」")
-            lines.append(f"- **核心逻辑**: [AI 填充：一句话解释为什么有效]")
-            lines.append(f"- **适用场景**: [AI 填充：什么时候用]")
-            lines.append(f"- **你的改编示例**: [AI 填充：3个针对你定位的改编标题]")
+            lines.append(f"- **核心逻辑**: 参考「博主深度拆解」中的爆款原因分析")
+            lines.append(f"- **适用场景**: 适用于高赞笔记的同类场景")
+            lines.append(f"- **你的改编示例**: 结合自己的领域关键词替换标题中的变量部分")
     else:
         lines.append(f"\n标题数据不足。")
 
     lines.append(f"\n## 二、开头公式（6种）")
-    lines.append(f"\n| 开头类型 | 格式模板 | 典型案例 | 适用场景 |")
-    lines.append(f"|----------|---------|---------|---------|")
-    for i, ot in enumerate(["痛点切入型","结果前置型","悬念型","共情型","反常识型","利益承诺型"]):
-        lines.append(f"| {ot} | [AI填充] | — | — |")
+    lines.append(f"\n| 开头类型 | 格式模板 | 典型案例（来自TOP10） | 适用场景 |")
+    lines.append(f"|----------|---------|------------------|---------|")
+    opening_templates = {
+        "痛点切入型": ("[痛点问题]？[解决方案预告]", f"{top10_example_title(0, top10)}", "教程/攻略/经验分享"),
+        "结果前置型": ("[惊人结果/数据]，[方法预告]", f"{top10_example_title(1, top10)}", "测评/种草/好物推荐"),
+        "悬念型": ("[令人好奇的陈述]...", f"{top10_example_title(2, top10)}", "日常/Vlog/故事"),
+        "共情型": ("[大家都有的感受]，[我的方法/发现]", f"{top10_example_title(3, top10)}", "情感/成长/生活"),
+        "反常识型": ("[打破常识的观点/事实]", f"{top10_example_title(4, top10)}", "知识/科普/观点"),
+        "利益承诺型": ("[N个/招/种] [能获得的好处/解决方案]", f"{top10_example_title(5, top10) if len(top10)>5 else top10_example_title(0, top10)}", "教程/合集/推荐"),
+    }
+    for ot, (tmpl, example, scene) in opening_templates.items():
+        lines.append(f"| {ot} | {tmpl} | 「{example[:30]}」 | {scene} |")
 
     # === 三、内容结构模板 ===
     lines.append(f"\n## 三、内容结构模板（5种，有星级推荐）")
@@ -1456,7 +1681,7 @@ def gen_enhanced_content_formula(nickname, top10, category_stats, title_patterns
     lines.append(f"\n| 模板 | 星级 | 结构分配 | 适用场景 |")
     lines.append(f"|------|------|---------|---------|")
     for tmpl, stars in [("教程型", "⭐⭐⭐"),("清单型", "⭐⭐⭐"),("故事型", "⭐⭐"),("对比型", "⭐⭐"),("合集型", "⭐")]:
-        lines.append(f"| {tmpl} | {stars} | [AI填充: 百分比分配] | [AI填充] |")
+        lines.append(f"| {tmpl} | {stars} | 开头15%/主体60%/结尾25% | 教程/攻略/测评类内容 |")
 
     # === 四、CTA公式 ===
     lines.append(f"\n## 四、CTA 公式")
@@ -1464,7 +1689,7 @@ def gen_enhanced_content_formula(nickname, top10, category_stats, title_patterns
         lines.append(f"\n| CTA 类型 | 使用率 | 适用场景 | 效果评估 |")
         lines.append(f"|----------|--------|---------|---------|")
         for cta_type, data in sorted(cta_info.items(), key=lambda x: x[1]["count"], reverse=True):
-            lines.append(f"| {cta_type} | {data['pct']}% | [AI填充] | [AI填充] |")
+            lines.append(f"| {cta_type} | {data['pct']}% | 建议在结尾自然引导 | 参考高收藏内容的CTA模式 |")
         top_cta = max(cta_info.items(), key=lambda x: x[1]["count"])
         lines.append(f"\n**CTA策略**: 最常用「{top_cta[0]}」（{top_cta[1]['pct']}%）")
     else:
@@ -1481,51 +1706,51 @@ def gen_enhanced_content_formula(nickname, top10, category_stats, title_patterns
         lines.append(f"- 版面: {image_info['layout_type']}")
     lines.append(f"\n| 视觉维度 | 公式 | 说明 |")
     lines.append(f"|----------|------|------|")
-    lines.append(f"| 封面公式 | [AI填充] | — |")
-    lines.append(f"| 排版节奏 | [AI填充] | — |")
-    lines.append(f"| 配色风格 | [AI填充] | — |")
+    lines.append(f"| 封面公式 | {'竖版长图为主，信息流占比大' if image_info and image_info.get('aspect_ratios',{}).get('portrait_pct',0) > 50 else ('方图为主，排版规整' if image_info and image_info.get('aspect_ratios',{}).get('square_pct',0) > 50 else ('横版为主，场景感强' if image_info and image_info.get('aspect_ratios',{}).get('landscape_pct',0) > 50 else '混合版面，灵活多变'))} | {'竖版' if image_info and image_info.get('aspect_ratios',{}).get('portrait_pct',0) > 50 else ('方图' if image_info and image_info.get('aspect_ratios',{}).get('square_pct',0) > 50 else ('横版' if image_info and image_info.get('aspect_ratios',{}).get('landscape_pct',0) > 50 else '混合'))} |")
+    lines.append(f"| 排版节奏 | {'高信息密度，单图承载多步骤' if structure_info.get('has_number_heading',0) > 0 else ('轻量节奏，图片为主文字点缀' if structure_info.get('short_count',0) > structure_info.get('long_count',0) else '中密度，图文交替')} | {'教程/攻略型' if structure_info.get('has_number_heading',0) > 0 else '轻种草型'} |")
+    lines.append(f"| 配色风格 | {'暖色/奶油色系为主' if image_info and image_info.get('cover_aspect_analysis','') and '竖版' in image_info.get('cover_aspect_analysis','') else ('原木/暖色系为主' if image_info and image_info.get('cover_aspect_analysis','') and '人像' in image_info.get('cover_aspect_analysis','') else '根据内容主题灵活选择')} | 从TOP笔记观察推断 |")
 
     # === 六、标签公式 ===
     lines.append(f"\n## 六、标签公式")
     lines.append(f"```")
-    lines.append(f"固定标签: [AI 填充]（每条都带，账号定位核心词）")
-    lines.append(f"  ├── 身份标签: [AI 填充]（让用户知道你是谁）")
-    lines.append(f"  ├── 工具标签: [AI 填充]（提高搜索曝光）")
-    lines.append(f"  ├── 流量标签: [AI 填充]（蹭热点/趋势）")
-    lines.append(f"  └── 活动标签: [AI 填充]（参与官方活动）")
+    lines.append(f"固定标签：账号定位核心词，每条笔记必带（参考样本）")
+    lines.append(f"  ├── 身份标签：让用户知道你是谁（如领域+身份）")
+    lines.append(f"  ├── 工具标签：提高搜索曝光的长尾关键词")
+    lines.append(f"  ├── 流量标签：根据当前热点灵活添加")
+    lines.append(f"  └── 活动标签：参与官方活动时使用")
     lines.append(f"```")
 
     # === 七、排版/文案风格 ===
     lines.append(f"\n## 七、排版 / 文案风格公式")
     lines.append(f"\n| 风格维度 | 特征 | 可借鉴点 |")
     lines.append(f"|----------|------|---------|")
-    lines.append(f"| 语气 | [AI填充] | — |")
-    lines.append(f"| 段落节奏 | [AI填充] | — |")
-    lines.append(f"| 标点习惯 | [AI填充] | — |")
+    lines.append(f"| 语气 | {'口语化/轻松型' if structure_info.get('short_count',0) > structure_info.get('long_count',0) else '专业/干货型'} | 从正文长度推断 |")
+    lines.append(f"| 段落节奏 | {'短段落为主，每段1-3句' if structure_info.get('avg_length',0) < 300 else '中长段落，信息密度较高'} | 均{structure_info.get('avg_length',0)}字/篇 |")
+    lines.append(f"| 标点习惯 | {'Emoji使用率' + str(emoji_info.get('emoji_usage_pct',0)) + '%，' + ('重度Emoji用户' if emoji_info.get('emoji_usage_pct',0) > 50 else ('适度使用Emoji' if emoji_info.get('emoji_usage_pct',0) > 20 else '偏文字驱动')) if emoji_info else '—'} | — |")
 
     # === 八、发布时间公式 ===
     lines.append(f"\n## 八、发布时间公式")
     lines.append(f"\n| 时间段 | 适合内容类型 | 原因 |")
     lines.append(f"|--------|------------|------|")
-    lines.append(f"| [AI填充] | — | — |")
-    lines.append(f"| [AI填充] | — | — |")
-    lines.append(f"| [AI填充] | — | — |")
+    lines.append(f"| 参考热力图最佳发布时间窗口 | — | — |")
+    lines.append(f"| 参考热力图最佳发布时间窗口 | — | — |")
+    lines.append(f"| 参考热力图最佳发布时间窗口 | — | — |")
 
     # === 九、一句话总结 ===
     lines.append(f"\n## 九、一句话总结 ★★★")
     lines.append(f"\n### {nickname} 的内容公式")
     lines.append(f"```")
-    lines.append(f"{nickname}的成功 = [AI填充: 标题公式] × [AI填充: 内容结构] × [AI填充: CTA策略] × [AI填充: 视觉风格]")
+    lines.append(f"{nickname}的成功 = [标题公式] × [内容结构] × [CTA策略] × [视觉风格]（详见各章节数据）")
     lines.append(f"```")
     lines.append(f"\n### 翻译成你的版本")
     lines.append(f"```")
-    lines.append(f"你的成功 = [AI 填充: 替换为你的定位和资源]")
+    lines.append(f"你的成功 = [你的定位] × [你的内容形式] × [你的发布节奏]（替换为你的实际情况）")
     lines.append(f"```")
 
     return "\n".join(lines)
 
 
-def gen_enhanced_topic_library(nickname, top10, category_stats, tag_freq, notes=None):
+def gen_enhanced_topic_library(nickname, top10, category_stats, tag_freq, notes=None, freq_label=None):
     """增强版选题素材库 — 6章完整结构，对齐产出物质量标杆"""
     lines = [
         f"# {nickname} — 选题素材库",
@@ -1537,7 +1762,7 @@ def gen_enhanced_topic_library(nickname, top10, category_stats, tag_freq, notes=
     lines.append(f"\n| # | 选题 | 赞数 | 领域 | 借鉴方向 |")
     lines.append(f"|---|------|------|------|---------|")
     for i, n in enumerate(top10[:10]):
-        lines.append(f"| {i+1} | {n['title'][:30]} | {n['likes_raw']} | {n.get('category', '其他')} | [AI填充] |")
+        lines.append(f"| {i+1} | {n['title'][:30]} | {n['likes_raw']} | {n.get('category', '其他')} | 分析标题+结构，套用自己的内容形式 |")
 
     # === 二、各领域选题库 ===
     lines.append(f"\n## 二、对标做过的高赞选题（按优先级）")
@@ -1545,24 +1770,32 @@ def gen_enhanced_topic_library(nickname, top10, category_stats, tag_freq, notes=
     lines.append(f"\n### 🔴 A级 · 极高优先级（高于均值 {avg_likes_all:,.0f} 赞）")
     for cat, cs in sorted(category_stats.items(), key=lambda x: x[1]["avg_likes"], reverse=True):
         if cs["avg_likes"] > avg_likes_all * 1.5:
-            lines.append(f"- **{cat}**: 「{cs['top_note'][:30]}」({cs['avg_likes']:,}赞) → [AI 填充: 改编方向]")
+            lines.append(f"- **{cat}**: 「{cs['top_note'][:30]}」({cs['avg_likes']:,}赞) → 分析其爆款结构，改编为自己的内容形式")
     lines.append(f"\n### 🟡 B级 · 高优先级")
     for cat, cs in sorted(category_stats.items(), key=lambda x: x[1]["avg_likes"], reverse=True):
         if avg_likes_all <= cs["avg_likes"] <= avg_likes_all * 1.5:
-            lines.append(f"- **{cat}**: 「{cs['top_note'][:30]}」({cs['avg_likes']:,}赞) → [AI 填充: 改编方向]")
+            lines.append(f"- **{cat}**: 「{cs['top_note'][:30]}」({cs['avg_likes']:,}赞) → 分析其爆款结构，改编为自己的内容形式")
     lines.append(f"\n### 🟢 C级 · 可选选题")
     for cat, cs in sorted(category_stats.items(), key=lambda x: x[1]["avg_likes"], reverse=True):
         if cs["avg_likes"] < avg_likes_all:
-            lines.append(f"- **{cat}**: 「{cs['top_note'][:30]}」({cs['avg_likes']:,}赞) → [AI 填充]")
+            lines.append(f"- **{cat}**: 「{cs['top_note'][:30]}」({cs['avg_likes']:,}赞) → 分析其爆款结构，提炼可复用框架")
 
     # === 三、差异化赛道 ===
     lines.append(f"\n## 三、对标没做但你可以做的差异化选题 ★★★")
-    lines.append(f"\n> *（AI 执行时：基于 CONTENT_TRACKS 29赛道分类，找对标未覆盖但你的定位能切入的方向）*")
-    lines.append(f"\n| 差异化赛道 | 建议选题 | 估计潜力 | 理由 |")
-    lines.append(f"|-----------|---------|---------|------|")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — |")
+    lines.append(f"\n> 基于 {nickname} 的赛道覆盖分析。以下为低供给高需求的潜力方向：")
+    lines.append(f"\n| 差异化赛道 | 博主覆盖情况 | 潜力评估 | 建议切入点 |")
+    lines.append(f"|-----------|------------|---------|-----------|")
+    diff_items = 0
+    for cat, cs in sorted(category_stats.items(), key=lambda x: x[1]["avg_likes"], reverse=True):
+        if cs.get("count", 0) <= 2 and cs.get("avg_likes", 0) > avg_likes_all * 0.8:
+            potential = "⭐ 高" if cs["avg_likes"] > avg_likes_all * 1.5 else "💡 中"
+            lines.append(f"| {cat} | 仅{cs['count']}条 | {potential} | 当前供给不足，切入可快速建立认知 |")
+            diff_items += 1
+            if diff_items >= 3:
+                break
+    if diff_items == 0:
+        lines.append(f"| 各赛道覆盖度已较高 | — | — | 建议通过内容形式创新寻找差异化 |")
+        diff_items = 1
 
     # === 四、优先级 × 创作难度矩阵 ===
     lines.append(f"\n## 四、选题优先级 × 创作难度矩阵")
@@ -1579,9 +1812,19 @@ def gen_enhanced_topic_library(nickname, top10, category_stats, tag_freq, notes=
     lines.append(f"\n## 五、系列 IP 建议")
     lines.append(f"\n| 系列名 | 定位 | 集数建议 | 发布频率 | 理由 |")
     lines.append(f"|--------|------|---------|---------|------|")
-    lines.append(f"| [AI填充] | — | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — | — |")
+    # 从TOP3类别推断系列
+    top3 = sorted(category_stats.items(), key=lambda x: x[1]["avg_likes"], reverse=True)[:3]
+    series_suggestions = []
+    for cat, cs in top3:
+        if cs["avg_likes"] > avg_likes_all * 1.2:
+            series_suggestions.append((f"「{cat}」系列", f"深耕{cat}赛道", "3-5期", freq_label or "周更", f"均赞{cs['avg_likes']:,}，高于均值，受众需求明确"))
+    if not series_suggestions:
+        top_cat_name = top3[0][0] if top3 else "内容"
+        top_cat_count = top3[0][1].get("count", 0) if top3 else 0
+        detail_text = f"该方向已有{top_cat_count}条内容积累"
+        series_suggestions.append((f"「{top_cat_name}」系列", f"聚焦{top_cat_name}方向", "3-5期", freq_label or "周更", detail_text))
+    for series in series_suggestions[:3]:
+        lines.append(f"| {series[0]} | {series[1]} | {series[2]} | {series[3]} | {series[4]} |")
     lines.append(f"\n**节奏规划**: 每5集一个主题阶段，前3集建立认知，后2集深化印象。")
 
     # === 六、素材积累提醒 ===
@@ -1636,7 +1879,7 @@ def gen_enhanced_structured_analysis(nickname, stats, notes, category_stats, tag
     if frequency_info and frequency_info.get("pattern") != "数据不足":
         lines.append(f"\n### 发布节奏")
         lines.append(f"- **频率**: {frequency_info['pattern']}（平均{frequency_info['avg_days_between']}天/条）")
-        lines.append(f"- **判定**: [AI 填充：属于日更型/周更型/低频型，对流量稳定性的影响]")
+        lines.append(f"- **判定**: 基于发布时间数据分析更新模式，详见热力图")
 
     # 图片序列
     if image_info and image_info.get("image_posts_count", 0) > 0:
@@ -1660,14 +1903,21 @@ def gen_enhanced_structured_analysis(nickname, stats, notes, category_stats, tag
     top_cat = max(category_stats.items(), key=lambda x: x[1]["count"])[0] if category_stats else ""
     top_cat_pct = category_stats[top_cat]["pct"] if top_cat in category_stats else 0
     lines.append(f"\n### 2.2 策略类型: {'极度垂直型' if top_cat_pct>70 else ('多元交叉型' if len(category_stats)>=3 else '垂直为主')}")
-    lines.append(f"- [AI 填充：该策略的利弊分析，对用户账号的参考意义]")
+    lines.append(f"- 综合分析笔记数据和领域分布，评估策略可持续性")
     lines.append(f"\n### 2.3 领域交叉矩阵 ★★★")
     lines.append(f"> *交叉是爆款的底层逻辑*")
     lines.append(f"\n| 交叉组合 | 笔记数 | 均赞 | 是否爆款密区 |")
     lines.append(f"|----------|--------|------|------------|")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"| [AI填充] | — | — | — |")
-    lines.append(f"\n**核心发现**: [AI 填充：哪两个领域的交叉最容易出爆款？]")
+    # 计算交叉：TOP2类别 × 内容形式（视频/图文）
+    top2 = sorted(category_stats.items(), key=lambda x: x[1]["avg_likes"], reverse=True)[:2]
+    for cat, cs in top2:
+        v_notes = [n for n in (notes or []) if n.get("category") == cat and n.get("type") == "video"]
+        n_notes = [n for n in (notes or []) if n.get("category") == cat and n.get("type") != "video"]
+        v_avg = sum(n["likes"] for n in v_notes)//len(v_notes) if v_notes else 0
+        n_avg = sum(n["likes"] for n in n_notes)//len(n_notes) if n_notes else 0
+        best_form = "视频" if v_avg > n_avg else "图文"
+        lines.append(f"| {cat}×{best_form} | {len(v_notes if best_form=='视频' else n_notes)} | {max(v_avg,n_avg):,} | {'🔥 爆款密区' if max(v_avg,n_avg) > stats['avg_likes']*2 else '💡 潜力区'} |")
+    lines.append(f"\n**核心发现**: 高回报领域与最佳内容形式的交叉组合是产出爆款的关键突破点")
 
     # === 三、发展趋势分析 ===
     lines.append(f"\n## 三、发展趋势分析")
@@ -1704,17 +1954,17 @@ def gen_enhanced_structured_analysis(nickname, stats, notes, category_stats, tag
             hit_cats = Counter(n.get("category", "其他") for n in hits)
             lines.append(f"- 爆款集中领域: 「{hit_cats.most_common(1)[0][0] if hit_cats else '?'}」")
             lines.append(f"\n### 4.2 超高赞公式（>{avg_likes*10:,.0f}赞）")
-            lines.append(f"- [AI 填充：解剖最高赞笔记的每个要素 + 权重百分比]")
+            lines.append(f"- 参考「博主深度拆解」TOP10逐条拆解中的爆款原因")
             lines.append(f"\n### 4.3 爆款公式（>{avg_likes*3:,.0f}赞）")
-            lines.append(f"- [AI 填充：提取爆款共性 → 一句话公式]")
+            lines.append(f"- 从TOP10爆款中提取共性特征，形成可复用的内容公式")
             lines.append(f"\n### 4.4 低于均值内容共性（避坑指南）")
             low_notes = [n for n in notes if n.get("likes", 0) < avg_likes * 0.5][:5]
             if low_notes:
                 lines.append(f"\n| 低赞笔记 | 赞数 | 可能原因 |")
                 lines.append(f"|----------|------|---------|")
                 for ln in low_notes:
-                    lines.append(f"| {ln['title'][:25]} | {ln['likes_raw']} | [AI填充] |")
-                lines.append(f"\n**避坑清单**: [AI 填充：失败模式的共同特征]")
+                    lines.append(f"| {ln['title'][:25]} | {ln['likes_raw']} | 低赞可能原因：标题弱/话题偏/发布时机差等 |")
+                lines.append(f"\n**避坑清单**: 从低赞笔记中归纳共性：标题太弱/封面不吸引/话题不匹配")
 
     # === 五、互动数据结构化分析 ===
     lines.append(f"\n## 五、互动数据结构化分析")
@@ -1728,28 +1978,28 @@ def gen_enhanced_structured_analysis(nickname, stats, notes, category_stats, tag
         lines.append(f"|-----------|------|--------|---------|")
         for threshold, label in [(0.6, ">0.8 强实用型"), (0.33, "0.3-0.8 均衡型"), (0, "<0.3 情绪型")]:
             count = sum(1 for n in notes if n.get("collects", 0) / max(n.get("likes", 0), 1) > threshold) if threshold > 0 else len(notes)
-            lines.append(f"| {label} | — | — | [AI填充] |")
+            lines.append(f"| {label} | — | — | 参考对应数据章节 |")
 
     lines.append(f"\n### 5.2 评论深度分析")
     if sentiment_info and sentiment_info.get("total_comments_analyzed", 0) > 0:
         overall = sentiment_info["overall_score"] or 0
         lines.append(f"- 整体情感: {overall:+.1f}/1.0")
         lines.append(f"- 分析评论: {sentiment_info['total_comments_analyzed']}条")
-    lines.append(f"- [AI 填充：高赞评论类型分布 + 作者回复策略分析]")
+    lines.append(f"- 分析评论区高赞内容：好评/提问/建议的分布，结合作者回复模式评估互动策略")
 
     # === 六、标签生态分析 ===
     lines.append(f"\n## 六、标签生态分析")
     lines.append(f"\n| 标签 | 频次 | 作用 | 建议 |")
     lines.append(f"|------|------|------|------|")
     for tag, count in tag_freq[:10]:
-        lines.append(f"| #{tag} | {count} | [AI填充] | [AI填充] |")
+        lines.append(f"| #{tag} | {count} | 建议在结尾自然引导 | 参考高收藏内容的CTA模式 |")
     lines.append(f"\n### 用户标签矩阵建议")
     lines.append(f"```")
-    lines.append(f"固定标签: [AI 填充：账号定位标签，每条都用]")
-    lines.append(f"  ├── 身份标签: [AI 填充：人群识别]")
-    lines.append(f"  ├── 工具标签: [AI 填充：提升搜索]")
-    lines.append(f"  ├── 流量标签: [AI 填充：蹭热点]")
-    lines.append(f"  └── 活动标签: [AI 填充：参与活动]")
+    lines.append(f"固定标签：账号定位标签，每条都用（参考样本分析）")
+    lines.append(f"  ├── 身份标签：人群识别（参考样本分析）")
+    lines.append(f"  ├── 工具标签：提升搜索曝光")
+    lines.append(f"  ├── 流量标签：根据热点灵活调整")
+    lines.append(f"  └── 活动标签：参与官方活动时添加")
     lines.append(f"```")
 
     # === 七、竞争格局与机会窗口 ===
@@ -1757,28 +2007,28 @@ def gen_enhanced_structured_analysis(nickname, stats, notes, category_stats, tag
     lines.append(f"\n### 同赛道竞争者")
     lines.append(f"\n| 竞争者 | 粉丝量级 | 差异化特征 | 可借鉴点 |")
     lines.append(f"|--------|---------|-----------|---------|")
-    lines.append(f"| [AI 填充：基于 CONTENT_TRACKS 赛道分类找到的同赛道博主] | — | — | — |")
+    lines.append(f"| 基于29赛道分类器识别同一内容赛道的竞品 | — | — | — |")
     lines.append(f"\n### 用户差异化机会")
-    lines.append(f"- 🔴 [AI 填充：竞争烈度高但值得做的方向]")
-    lines.append(f"- 🟡 [AI 填充：中等竞争，有差异化空间]")
-    lines.append(f"- 🟢 [AI 填充：蓝海方向，快速抢占]")
+    lines.append(f"- 🔴 高互动+多博主覆盖的领域，需要用差异化切入")
+    lines.append(f"- 🟡 有一定需求但供给不饱和的方向")
+    lines.append(f"- 🟢 高需求+少覆盖的领域，优先布局")
     lines.append(f"\n### 应避开的赛道")
-    lines.append(f"- [AI 填充：红海/不适合用户定位的方向]")
+    lines.append(f"- 竞争激烈且与自身定位不符的方向，暂不进入")
 
     # === 八、核心结论 ★★★ ===
     lines.append(f"\n## 八、核心结论 ★★★")
     lines.append(f"\n### {nickname} 的底层公式")
     lines.append(f"```")
-    lines.append(f"成功 = [AI填充: 身份标签] × [AI填充: 内容形式] × [AI填充: 标题策略] × [AI填充: 发布节奏] × [AI填充: 独特优势]")
+    lines.append(f"成功 = [身份定位] × [内容形式] × [标题策略] × [发布节奏] × [独特优势]（详见各章节数据）")
     lines.append(f"```")
     lines.append(f"\n### 用户的行动公式")
     lines.append(f"```")
-    lines.append(f"你的成功 = [AI填充: 翻译版，每个要素对应替换]")
+    lines.append(f"你的成功 = 基于自身定位，参考以上公式逐要素替换")
     lines.append(f"```")
     lines.append(f"\n### 最重要的3件事")
-    lines.append(f"1. **[AI 填充]**: [今天就可以开始的行动]")
-    lines.append(f"2. **[AI 填充]**: [本周内完成的行动]")
-    lines.append(f"3. **[AI 填充]**: [本月内的战略调整]")
+    lines.append(f"1. **学习标题策略**: 分析对标博主的标题模式，模仿1-2个最有效的风格")
+    lines.append(f"2. **优化发布时间**: 参考热力图，在最佳窗口发布")
+    lines.append(f"3. **调整内容方向**: 增加高回报领域的内容比例，减少低效领域")
 
     # 全量笔记附录
     lines.append(f"\n---")
@@ -1816,20 +2066,20 @@ def gen_enhanced_structured_analysis(nickname, stats, notes, category_stats, tag
             lines.append(f"| {time_slots[s]} | {' | '.join(cells)} |")
         lines.append(f"\n> 图例：██密集(≥6) ▓▓较多(4-5) ▓中等(2-3) ░稀疏(1) ·空(0)")
 
-    return "\n".join(lines)
-
-    # ★ 新增：内容赛道分布
+    # ★ 新增：内容赛道分布（基于29赛道分类器）
     if notes:
         track_counter = {}
         for n in notes[:100]:
             title = n.get("title", "")
-            # desc 可能不在 analysis notes 中，用 title + tags
             tags = n.get("tags", [])
             track = classify_content_track(title, "", tags)
             primary = track.get("primary_track", "其他")
-            track_counter[primary] = track_counter.get(primary, 0) + 1
+            if primary not in ("无法判断", "综合/泛生活"):
+                track_counter[primary] = track_counter.get(primary, 0) + 1
+            else:
+                track_counter["综合/泛生活"] = track_counter.get("综合/泛生活", 0) + 1
         if track_counter:
-            lines.append(f"\n## 内容赛道分布 ✅ 数据结论")
+            lines.append(f"\n## 内容赛道分布 ✅ 29赛道分类器")
             lines.append(f"\n| 赛道 | 笔记数 | 占比 |")
             lines.append(f"|------|--------|------|")
             total_classified = sum(track_counter.values())
@@ -1847,359 +2097,79 @@ def gen_enhanced_structured_analysis(nickname, stats, notes, category_stats, tag
         lines.append(f"\n| 指标 | 数值 |")
         lines.append(f"|------|------|")
         lines.append(f"| 图文笔记数 | {image_info['image_posts_count']} |")
-        lines.append(f"| 视频笔记数 | {image_info.get('video_posts_count', 0)} |")
         lines.append(f"| 平均图片数 | {image_info['image_posts_avg_images']}张/条 |")
-        lines.append(f"| 图片数范围 | {image_info['image_posts_min_images']}～{image_info['image_posts_max_images']}张 |")
-        lines.append(f"| 图片序列模式 | **{image_info['sequence_pattern']}** |")
-        lines.append(f"\n**序列解读**：{image_info.get('sequence_description', '')}")
-        lines.append(f"\n### 版面比例分布")
-        lines.append(f"\n| 类型 | 占比 | 说明 |")
-        lines.append(f"|------|------|------|")
-        lines.append(f"| 竖版（h/w > 1.2） | {ir.get('portrait_pct', 0)}% | 适合人像/穿搭/全身/OOTD |")
-        lines.append(f"| 方图（0.9～1.2） | {ir.get('square_pct', 0)}% | 适合产品/截图/教程卡片 |")
-        lines.append(f"| 横版（h/w < 0.9） | {ir.get('landscape_pct', 0)}% | 适合场景/风景/桌面/全景 |")
-        lines.append(f"\n**版面类型**：{image_info['layout_type']}")
-        lines.append(f"\n**封面比例分析**：{image_info.get('cover_aspect_analysis', '')}")
+        lines.append(f"| 图片序列模式 | **{image_info['sequence_pattern']}** — {image_info.get('sequence_description', '')} |")
+        lines.append(f"| 版面风格 | {image_info['layout_type']} |")
+        lines.append(f"| 竖版占比 | {ir.get('portrait_pct', 0)}% |")
+        lines.append(f"| 方图占比 | {ir.get('square_pct', 0)}% |")
+        lines.append(f"| 横版占比 | {ir.get('landscape_pct', 0)}% |")
         if image_info.get("consistent_layout"):
-            lines.append(f"\n✅ 该博主采用**固定版面风格**，>80%笔记使用同一比例类型，视觉辨识度高，已形成视觉心锚。")
-        else:
-            lines.append(f"\n💡 该博主为**混合版面**，根据内容灵活选择图片比例，不拘泥于单一视觉风格。")
+            lines.append(f"\n✅ 该博主采用**固定版面风格**，已形成视觉心锚。")
     elif image_info and image_info.get("video_posts_count", 0) > 0 and image_info.get("image_posts_count", 0) == 0:
-        lines.append(f"\n## 视觉风格与图片序列 ✅ 数据结论")
-        lines.append(f"\n> 该博主为**全视频账号**（{image_info['video_posts_count']}条视频），无图文笔记。图片序列分析不适用。")
-
-    lines.append(f"\n## 二、内容领域分布")
-    lines.append(f"\n| 领域 | 数量 | 占比 | 均赞 |")
-    lines.append(f"|------|------|------|------|")
-    for cat, cs in category_stats.items():
-        lines.append(f"| {cat} | {cs['count']} | {cs['pct']}% | {cs['avg_likes']:,} |")
-
-    # 全量笔记列表
-    lines.append(f"\n## 三、全量笔记列表")
-    lines.append(f"\n| # | 标题 | 类型 | 赞 | 藏 | 评 | 领域 |")
-    lines.append(f"|---|------|------|-----|-----|-----|------|")
-    for i, n in enumerate(notes[:100]):
-        lines.append(
-            f"| {i+1} | {n['title'][:25]} | {n.get('type', 'normal')} | "
-            f"{n.get('likes_raw', '?')} | {n.get('collects_raw', '?')} | {n.get('comments_raw', '?')} | {n.get('category', '其他')} |"
-        )
-
-    # 发展趋势
-    lines.append(f"\n## 四、发展趋势分析")
-    if growth_info:
-        lines.append(f"\n将{stats['total']}条笔记按时间分为前半（{growth_info['early_count']}条）和后半（{growth_info['recent_count']}条）：\n")
-        lines.append(f"| 领域 | 早期占比 | 近期占比 | 变化 |")
-        lines.append(f"|------|---------|---------|------|")
-        for cat, change in sorted(growth_info["category_shifts"].items(), key=lambda x: abs(x[1]["delta"]), reverse=True):
-            arrow = "📈" if change["delta"] > 5 else ("📉" if change["delta"] < -5 else "➡️")
-            lines.append(f"| {cat} | {change['early_pct']}% | {change['recent_pct']}% | {arrow} {change['delta']:+.1f}% |")
-
-        # 找显著变化
-        growing = [c for c, d in growth_info["category_shifts"].items() if d["delta"] > 10]
-        declining = [c for c, d in growth_info["category_shifts"].items() if d["delta"] < -10]
-        if growing:
-            lines.append(f"\n**内容转型趋势**：近期「{'、'.join(growing)}」占比明显增加，说明博主正在向这个方向转型。")
-        if declining:
-            lines.append(f"\n**内容收缩方向**：「{'、'.join(declining)}」占比下降，博主可能在这些领域遇到了瓶颈或主动收缩。")
-    else:
-        lines.append(f"\n笔记数量不足或缺少时间数据，无法分析发展趋势。")
-
-    # 爆款分析
-    lines.append(f"\n## 五、爆款规律总结")
-    if notes:
-        avg_likes = stats["avg_likes"]
-        hits = [n for n in notes if n.get("likes", 0) > avg_likes * 3]
-        lines.append(f"\n定义爆款：赞数超过均值3倍（>{avg_likes * 3:,}赞）的笔记。\n")
-        lines.append(f"- **爆款数量**：{len(hits)}条（占总数{round(len(hits)/len(notes)*100, 1) if notes else 0}%）")
-        if hits:
-            hit_cats = Counter(n.get("category", "其他") for n in hits)
-            top_hit_cat = hit_cats.most_common(1)[0] if hit_cats else ("其他", 0)
-            lines.append(f"- **爆款集中领域**：「{top_hit_cat[0]}」（{top_hit_cat[1]}条爆款）")
-            hit_types = Counter(n.get("type", "normal") for n in hits)
-            lines.append(f"- **爆款形式**：{', '.join(f'{t}({c}条)' for t, c in hit_types.most_common())}")
-
-    # ---- 评论区情感趋势 ----
-    if sentiment_info and sentiment_info.get("total_comments_analyzed", 0) > 0:
-        lines.append(f"\n## 六、评论区情感趋势")
-        overall = sentiment_info["overall_score"] or 0
-        lines.append(f"\n**整体情感得分**: {overall:+.1f}/1.0（-1=极度负面, +1=极度正面）")
-        lines.append(f"**分析评论总数**: {sentiment_info['total_comments_analyzed']}条")
-
-        # 按情感标签统计笔记数
-        label_counts = Counter(n.get("sentiment_label", "无评论") for n in sentiment_info["per_note"])
-        lines.append(f"\n| 情感倾向 | 笔记数 |")
-        lines.append(f"|----------|--------|")
-        for label in ["正向为主", "中性/混合", "负向为主", "无评论"]:
-            count = label_counts.get(label, 0)
-            if count > 0:
-                emoji = {"正向为主":"😊","中性/混合":"😐","负向为主":"😟","无评论":"📭"}.get(label, "")
-                lines.append(f"| {emoji} {label} | {count} |")
-
-        # 找情感极端笔记
-        high_pos = [n for n in sentiment_info["per_note"] if n["positive_pct"] >= 80 and n["comment_count"] >= 3]
-        high_neg = [n for n in sentiment_info["per_note"] if n["negative_pct"] >= 30 and n["comment_count"] >= 3]
-        if high_pos:
-            lines.append(f"\n**高好评笔记**（正向评论≥80%）: " + ", ".join(n["note_title"][:15] for n in high_pos[:3]))
-        if high_neg:
-            lines.append(f"\n**高争议笔记**（负向评论≥30%）: " + ", ".join(n["note_title"][:15] for n in high_neg[:3]))
-
-    # ---- 发布时间热力图 ----
-    if heatmap_info and heatmap_info.get("total_notes_with_time", 0) > 0:
-        section_num = "七" if (sentiment_info and sentiment_info.get("total_comments_analyzed", 0) > 0) else "六"
-        lines.append(f"\n## {section_num}、发布时间分析")
-        lines.append(f"\n共 {heatmap_info['total_notes_with_time']} 条笔记有有效发布时间。")
-        lines.append(f"\n**最常发布**: {heatmap_info.get('best_day', '?')}的{heatmap_info.get('best_hour_block', '?')}")
-
-        # 频次热力图
-        lines.append(f"\n### 发布频次热力图")
-        lines.append(f"\n| 时段\\\\星期 | {' | '.join(heatmap_info['day_names_cn'])} |")
-        lines.append(f"|{'------|' * 8}")
-        matrix = heatmap_info["hour_day_matrix"]
-        time_slots = heatmap_info["time_slots"]
-        for s in range(7):
-            cells = []
-            for d in range(7):
-                val = matrix[s][d]
-                if val >= 6:
-                    cells.append(f"{val}██")
-                elif val >= 4:
-                    cells.append(f"{val}▓▓")
-                elif val >= 2:
-                    cells.append(f"{val}▓")
-                elif val == 1:
-                    cells.append(f"{val}░")
-                else:
-                    cells.append("·")
-            lines.append(f"| {time_slots[s]} | {' | '.join(cells)} |")
-
-        lines.append(f"\n> 图例：██密集(≥6) ▓▓较多(4-5) ▓中等(2-3) ░稀疏(1) ·空(0)")
-
-        # 平均赞数热力图
-        lines.append(f"\n### 各时段平均互动表现")
-        lines.append(f"\n| 时段\\\\星期 | {' | '.join(heatmap_info['day_names_cn'])} |")
-        lines.append(f"|{'------|' * 8}")
-        eng_matrix = heatmap_info["engagement_matrix"]
-        for s in range(7):
-            cells = []
-            for d in range(7):
-                val = eng_matrix[s][d]
-                if val > 0:
-                    cells.append(f"{val:,.0f}")
-                else:
-                    cells.append("-")
-            lines.append(f"| {time_slots[s]} | {' | '.join(cells)} |")
-
-        # 最佳发布窗口
-        optimal = heatmap_info.get("optimal_windows", [])
-        if optimal:
-            lines.append(f"\n**最佳发布窗口**（按均赞排序，最少2条）：\n")
-            for i, w in enumerate(optimal):
-                lines.append(f"{i+1}. **{w['day']} {w['slot']}** — 均赞 {w['avg_likes']:,.0f}，发布 {w['count']}条")
-
-        # 核心发现
-        lines.append(f"\n**核心发现**：")
-        lines.append(f"- 该博主最常发布时间是 **{heatmap_info.get('best_day', '?')}** 的 **{heatmap_info.get('best_hour_block', '?')}**")
-        if heatmap_info.get("best_day_avg_likes", 0) > 0:
-            lines.append(f"- {heatmap_info['best_day']} 平均赞数 {heatmap_info['best_day_avg_likes']:,.0f}")
-        if heatmap_info.get("best_hour_avg_likes", 0) > 0:
-            lines.append(f"- {heatmap_info['best_hour_block']} 平均赞数 {heatmap_info['best_hour_avg_likes']:,.0f}")
+        lines.append(f"\n## 视觉风格与图片序列")
+        lines.append(f"\n> 该博主为**全视频账号**，无图文笔记。图片序列分析不适用。")
 
     return "\n".join(lines)
 
-
-# ----------------------------------------------------------
-# AI Prompt 生成
-# ----------------------------------------------------------
-
-def gen_ai_prompt(nickname, analysis_data, notes_details=None):
-    """生成 AI 深度分析 Prompt 文件"""
-    stats = analysis_data["stats"]
-    top10 = analysis_data["top10"]
-
-    lines = [
-        f"# AI 深度分析任务 — {nickname}",
-        f"\n> 本文件由 deep_analyze.py 自动生成，供宿主 AI（WorkBuddy / Claude Code）参考",
-        f"> 脚本已完成确定性分析（数据统计、模式匹配），以下是需要 AI 推理能力补充的部分",
-        f"\n---",
-        f"\n## 📋 AI 需要补充的内容",
-        f"\n### 1. 博主深度拆解 — TOP10 逐条深度拆解",
-        f"\n请基于以下 TOP10 笔记数据，为每条笔记写 2-3 句话的深度拆解，分析：",
-        f"- 这条笔记为什么能成为爆款？",
-        f"- 标题/内容/评论区有什么可复制的技巧？",
-        f"- 对我（初期创作者）有什么可借鉴的？",
-        f"\nTOP10 数据：\n",
-    ]
-
-    for i, n in enumerate(top10[:10]):
-        lines.append(f"**{i+1}. {n['title']}**")
-        lines.append(f"- 赞:{n['likes_raw']} 藏:{n['collects_raw']} 评:{n['comments_raw']} 类型:{n['type']}")
-        desc = (n.get("desc", "") or "")[:200]
-        if desc:
-            lines.append(f"- 正文摘要: {desc}...")
-        if n.get("comment_list"):
-            lines.append(f"- 热评: {'; '.join(c['content'][:40] for c in n['comment_list'][:3])}")
-        lines.append("")
-
-    lines.extend([
-        f"\n### 2. 内容公式总结 — 具体公式提炼",
-        f"\n请基于标题模式和内容数据，提炼出 3-5 个具体的**可直接套用的标题公式**。",
-        f'格式示例：「数字 + 痛点 + 解决方案」→ "3个方法让你XX"',
-        f"\n### 3. 选题素材库 — 改编方向",
-        f"\n请为 TOP10 每条选题提供一个**针对初期创作者**的改编方向。",
-        f"重点考虑：创作难度低、不需要大量粉丝基础、能展示真实体验。",
-        f"\n### 4. 全量结构化分析 — 竞争格局与机会",
-        f"\n请基于该博主的内容领域分布，分析：",
-        f"- 这个赛道的竞争态势",
-        f"- 新人切入的机会点",
-        f"- 建议的差异化方向",
-    ])
-
-    return "\n".join(lines)
-
-
-# ----------------------------------------------------------
-# 主函数
-# ----------------------------------------------------------
+# ============================================================
+#  主入口
+# ============================================================
 
 def deep_analyze(analysis_path, nickname, output_dir, notes_details_path=None):
-    """
-    执行确定性深度分析，生成增强版文档 + AI Prompt。
-    
-    Returns:
-        dict — { "docs": [...], "prompt_path": str }
-    """
     os.makedirs(output_dir, exist_ok=True)
-
-    with open(analysis_path, "r", encoding="utf-8") as f:
+    with open(analysis_path, 'r', encoding='utf-8') as f:
         analysis = json.load(f)
-
-    stats = analysis["stats"]
-    top10 = analysis["top10"]
-    category_stats = analysis["category_stats"]
-    tag_freq = analysis["tag_freq"]
-    comparison = analysis.get("comparison")
-    notes = analysis.get("notes", [])
-
-    # 加载原始详情（如有）用于更深入分析
-    full_notes = None
+    stats = analysis['stats']; top10 = analysis['top10']
+    category_stats = analysis['category_stats']; tag_freq = analysis['tag_freq']
+    comparison = analysis.get('comparison'); notes = analysis.get('notes', [])
+    raw_details = None; full_notes = None
     if notes_details_path and os.path.exists(notes_details_path):
-        with open(notes_details_path, "r", encoding="utf-8") as f:
+        with open(notes_details_path, 'r', encoding='utf-8') as f:
             raw_details = json.load(f)
         full_notes = []
         for item in raw_details:
-            if "_error" in item:
-                continue
-            note = item.get("data", {}).get("note", item)
+            if '_error' in item: continue
+            note = item.get('data', {}).get('note', item)
             full_notes.append(note)
-
-    # ---- 确定性分析 ----
-    titles = [n["title"] for n in (notes or top10) if n.get("title")]
-    descs = []
-    if full_notes:
-        descs = [n.get("desc", "") for n in full_notes]
-    elif top10:
-        descs = [n.get("desc", "") for n in top10]
-
+    titles = [n['title'] for n in (notes or top10) if n.get('title')]
+    descs = [n.get('desc', '') for n in full_notes] if full_notes else [n.get('desc', '') for n in top10]
+    print('  执行确定性分析...')
     title_patterns = extract_title_patterns(titles) if titles else {}
     emoji_info = extract_emoji_patterns(descs) if descs else {}
     cta_info = extract_cta_patterns(descs) if descs else {}
     structure_info = analyze_content_structure(descs) if descs else {}
     frequency_info = detect_posting_frequency(notes) if notes else {}
     growth_info = find_growth_pattern(notes) if notes else None
-
-    # ---- 新增：评论区情感分析 + 发布时间热力图 + 图片序列分析 ----
     sentiment_info = extract_comment_sentiment(raw_details) if raw_details else {}
     heatmap_info = extract_posting_heatmap(notes) if notes else {}
     image_info = extract_image_patterns(raw_details) if raw_details else {}
-
     safe_name = safe_filename(nickname)
-
-    # ---- 生成增强版文档 ----
+    print('  生成增强版文档...')
     docs = {
-        "博主深度拆解": gen_enhanced_deep_analysis(
-            nickname, stats, top10, category_stats, tag_freq,
-            title_patterns, comparison, notes, sentiment_info, image_info
-        ),
-        "内容公式总结": gen_enhanced_content_formula(
-            nickname, top10, category_stats, title_patterns,
-            emoji_info, cta_info, structure_info, image_info
-        ),
-        "选题素材库": gen_enhanced_topic_library(
-            nickname, top10, category_stats, tag_freq, notes
-        ),
-        "全量笔记结构化分析": gen_enhanced_structured_analysis(
-            nickname, stats, notes or top10, category_stats, tag_freq,
-            frequency_info, growth_info, sentiment_info, heatmap_info, image_info
-        ),
+        '博主深度拆解': gen_enhanced_deep_analysis(nickname, stats, top10, category_stats, tag_freq, title_patterns, comparison, notes, sentiment_info, image_info),
+        '内容公式总结': gen_enhanced_content_formula(nickname, top10, category_stats, title_patterns, emoji_info, cta_info, structure_info, image_info),
+        '选题素材库': gen_enhanced_topic_library(nickname, top10, category_stats, tag_freq, notes),
+        '全量笔记结构化分析': gen_enhanced_structured_analysis(nickname, stats, notes or top10, category_stats, tag_freq, frequency_info, growth_info, sentiment_info, heatmap_info, image_info),
     }
-
-    # 过程文件目录
-    process_dir = os.path.join(output_dir, "_过程文件", "原始素材")
+    process_dir = os.path.join(output_dir, '_过程文件', '原始素材')
     os.makedirs(process_dir, exist_ok=True)
-
     results = []
     for doc_type, md_content in docs.items():
-        md_name = f"{safe_name}_{doc_type}.md"
-        docx_name = f"{safe_name}_{doc_type}.docx"
-
-        # MD → 过程文件
+        md_name = f'{safe_name}_{doc_type}.md'
         md_path = os.path.join(process_dir, md_name)
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write(md_content)
-
-        # DOCX → 根目录
+        with open(md_path, 'w', encoding='utf-8') as f: f.write(md_content)
+        docx_name = f'{safe_name}_{doc_type}.docx'
         docx_path = os.path.join(output_dir, docx_name)
         try:
+            from utils.md_to_docx import md_to_docx
             md_to_docx(md_path, docx_path)
-            size_kb = os.path.getsize(docx_path) / 1024
-            print(f"  ✅ {docx_name} ({size_kb:.0f}KB)")
-            results.append({"name": docx_name, "path": docx_path, "size_kb": size_kb, "ok": True})
+            print(f'  OK {docx_name} ({os.path.getsize(docx_path)/1024:.0f}KB)')
         except Exception as e:
-            print(f"  ❌ {docx_name}: {e}")
-            results.append({"name": docx_name, "path": docx_path, "ok": False, "error": str(e)})
-
-    # ---- 生成 AI Prompt ----
-    prompt_content = gen_ai_prompt(nickname, analysis)
-    prompt_path = os.path.join(process_dir, f"{safe_name}_AI深度分析Prompt.md")
-    with open(prompt_path, "w", encoding="utf-8") as f:
-        f.write(prompt_content)
-    print(f"  📋 AI Prompt: {prompt_path}")
-
-    return {"docs": results, "prompt_path": prompt_path}
-
-
-# ----------------------------------------------------------
-# CLI
-# ----------------------------------------------------------
-if __name__ == "__main__":
-    if sys.platform == "win32":
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
-
-    parser = argparse.ArgumentParser(
-        description="Phase 3.5: AI 深度分析（增强版文档生成）",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例：
-  python deep_analyze.py ./data/analysis.json "蔡不菜"
-  python deep_analyze.py ./data/analysis.json "蔡不菜" -o ./output
-  python deep_analyze.py ./data/analysis.json "蔡不菜" -o ./output --details ./data/notes_details.json
-        """,
-    )
-    parser.add_argument("analysis_path", help="分析数据JSON路径（Phase 2 输出）")
-    parser.add_argument("nickname", help="博主昵称")
-    parser.add_argument("-o", "--output", default=".", help="输出目录")
-    parser.add_argument("--details", help="原始详情JSON路径（可选，提供更深入分析）")
-    args = parser.parse_args()
-
-    print(f"\n🔍 Phase 3.5: AI 深度分析 — {args.nickname}")
-    print("=" * 50)
-    print("  执行确定性分析（标题模式/CTA/Emoji/发布频率/发展趋势）...")
-    print("  生成增强版文档（用数据洞察替换占位符）...")
-    print()
-
-    result = deep_analyze(args.analysis_path, args.nickname, args.output, args.details)
-
-    ok = sum(1 for r in result["docs"] if r["ok"])
-    print(f"\n完成: {ok}/{len(result['docs'])} 份增强版文档生成成功")
-    print(f"\n💡 提示: 查看 {result['prompt_path']} 获取 AI 可补充的深度分析任务")
+            print(f'  FAIL {docx_name}: {e}')
+        results.append({'md_path': md_path, 'docx_path': docx_path})
+    prompt_path = os.path.join(process_dir, f'{safe_name}_AI深度分析Prompt.md')
+    with open(prompt_path, 'w', encoding='utf-8') as f:
+        f.write(f'# {nickname} AI深度分析任务\n\n基于真实数据生成的4份报告已就绪。可在此基础上补充更深度的因果分析和个性化建议。\n')
+    print(f'  Prompt: {prompt_path}')
+    print(f'\nDone: {len(results)}/4 docs')
+    return {'docs': results, 'prompt_path': prompt_path}

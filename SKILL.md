@@ -11,9 +11,11 @@ description: >
 
   【Single Viral Post Breakdown · 单条爆款拆解】
   输入笔记链接或已有数据，五维+三镜深度拆解 → 公式卡。独立功能，不依赖博主拆解流程。
+  ★ 新功能：--ocr 模式可无需登录提取图片文字（原理见下文「OCR 图文提取」章节）
 
   适用任何领域：AI、美食、穿搭、旅行、母婴、健身、美妆、家居等。
   Skill 自动完成环境准备。用户唯一需要做的是扫码登录小红书（建议使用测试号/小号）。
+  ★ OCR 模式无需登录，直接提取图片内容。
 
   触发词：
     博主拆解 → 「拆解博主」「分析博主」「对标账号」「博主数据」
@@ -176,6 +178,12 @@ python scripts/analyze_viral_post.py --url "<链接>" "<博主名>" -o ./output
 
 # 通过 feed_id
 python scripts/analyze_viral_post.py --feed-id <feed_id> "<博主名>" -o ./output
+
+# ★ 通过链接 + OCR 提取图片文字（无需登录！）
+python scripts/analyze_viral_post.py --url "<链接>" "<博主名>" --ocr -o ./output
+
+# OCR 独立使用（仅提取图片文字，不拆解）
+python scripts/extract_post_images_ocr.py --url "<链接>" -o ./ocr_output
 ```
 
 ### 方法论
@@ -190,6 +198,74 @@ python scripts/analyze_viral_post.py --feed-id <feed_id> "<博主名>" -o ./outp
 - 📐 **元数据** — 图文笔记封面比例/图片数量来自 MCP 返回的 `imageList`
 
 **产出**：`{博主}_{标题}_五维拆解.docx`（含公式卡：标题公式 + 结构模板 + CTA 策略 + 适配赛道）
+
+---
+
+## 📸 OCR 图文提取（无需登录）
+
+### 技术原理
+
+小红书虽然是 SPA，但页面 HTML 中内嵌了包含图片 CDN 地址的 JSON 数据（用于 SEO 和首屏渲染）。图片 CDN（`sns-webpic-qc.xhscdn.com`）**没有鉴权限制**，只需设置 `Referer` 头即可直接下载。下载后用 `pytesseract` 做 OCR 识别，提取图片中的文字内容。
+
+```
+帖子URL → HTTPS请求HTML → 正则提取CDN图片URL → 下载图片 → pytesseract OCR → 结构化输出
+```
+
+**整个过程无需登录，无需 MCP。**
+
+### 前置依赖
+
+```bash
+# Python 包
+pip install requests Pillow pytesseract
+
+# 系统依赖：Tesseract OCR + 中文语言包
+# macOS:   brew install tesseract tesseract-lang
+# Ubuntu:  apt install tesseract-ocr tesseract-ocr-chi-sim
+# Windows: 下载 https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+### 使用方式
+
+**方式 1：集成到五维拆解（推荐）**
+
+```bash
+python scripts/analyze_viral_post.py --url "<链接>" "博主名" --ocr -o ./output
+```
+
+OCR 提取的图片文字会自动融入五维分析：
+- **第二维 · 内容骨架**：用图片文字替代/补充空洞的正文，展示逐图信息分布和密度分析
+- **第三维 · 视听节奏**：基于每张图的真实文字量构建信息流结构（封面吸引 → 密集信息交付 → 视觉缓冲 → ...）
+- **附录**：完整 OCR 文字作为分析佐证
+
+**方式 2：独立提取（不拆解）**
+
+```bash
+python scripts/extract_post_images_ocr.py --url "<链接>" -o ./ocr_output
+```
+
+产出物：
+| 文件 | 内容 |
+|------|------|
+| `ocr_combined_text.txt` | 所有图片 OCR 文字的合并文本 |
+| `ocr_results.json` | 逐图 OCR 结果（含置信度、文字量等） |
+
+### 价值：把 ⚠️ 变成 ✅
+
+当前五维拆解中大量结论挂着「⚠️ 文本推断」标注。对于**正文空洞的图文笔记**（只有标签、无实际文案），OCR 能从图片中提取真实内容，让分析从「盲猜」变成「实证」：
+
+| 原状态 | OCR 增强后 |
+|--------|-----------|
+| ⚠️ 正文仅 #标签，无法分析内容骨架 | ✅ 从图片提取文字 → 真实的 ASL/结构分析 |
+| ⚠️ 信息流纯文本推断 | ✅ 逐图文字量 → 真实的信息流结构 |
+| ⚠️ 爆款要素只能猜 | ✅ 图片中的标题模式/步骤结构可被识别 |
+
+### 局限
+
+- OCR 有错字率（简体中文平均 70-85% 准确率），高质量图片可达到 90%+
+- 手写体、艺术字、小字体识别效果差
+- 纯图片（无文字）的 OCR 无意义
+- 小红书 HTML 结构可能变化，URL 提取正则需维护
 
 ---
 
@@ -251,8 +327,9 @@ data = client.call("search_feeds", {"keyword": "<博主名>"})
 │   ├── generate_docs.py      # Phase 3: 文档骨架
 │   ├── deep_analyze.py       # Phase 3.5: AI 深度分析 + 情感分析 + 热力图 + 赛道分类
 │   ├── generate_dashboard.py # Phase 3.6: 可视化面板
-│   ├── analyze_viral_post.py # Phase 4: 单条爆款拆解
-│   ├── cross_analyze.py      # Phase 5: 跨博主对比
+│   ├── analyze_viral_post.py       # Phase 4: 单条爆款拆解（支持 --ocr）
+│   ├── extract_post_images_ocr.py  # ★ 新增：无需登录的图片OCR提取
+│   ├── cross_analyze.py            # Phase 5: 跨博主对比
 │   └── utils/
 │       ├── common.py         # parse_count / safe_filename / ms_to_datetime
 │       ├── mcp_client.py     # MCP HTTP 封装

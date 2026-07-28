@@ -48,6 +48,11 @@ from deep_analyze import (
     SENTIMENT_LEXICON,
     classify_content_track,
 )
+try:
+    from extract_post_images_ocr import extract_and_ocr as _extract_ocr
+    HAS_OCR = True
+except ImportError:
+    HAS_OCR = False
 
 
 # ============================================================
@@ -733,9 +738,17 @@ def infer_content_from_comments(comments, desc=""):
 #  报告生成
 # ============================================================
 
-def gen_single_note_report(note_data, comments, nickname="", note_title=""):
+def gen_single_note_report(note_data, comments, nickname="", note_title="", ocr_data=None):
     """
     生成五维+三镜完整拆解报告 MD 内容。
+
+    Args:
+        note_data: MCP 返回的笔记数据
+        comments: 评论列表
+        nickname: 博主昵称
+        note_title: 笔记标题（备用）
+        ocr_data: extract_post_images_ocr 返回的 OCR 结果（可选）。
+                  设置后，图文笔记的分析将使用图片中的实际文字内容。
     """
     title = note_data.get("title", note_data.get("displayTitle", note_title))[:60]
     desc = note_data.get("desc", "") or ""
@@ -747,6 +760,24 @@ def gen_single_note_report(note_data, comments, nickname="", note_title=""):
     shares = parse_count(interact.get("sharedCount", "0"))
     tags = re.findall(r"#([^#\[\]]+?)(?:\[.*?\])?#?", desc)
     note_time = note_data.get("time", 0)
+
+    # ---- OCR 数据预处理 ----
+    ocr_combined = ""
+    ocr_images_detail = []
+    ocr_has_content = False
+    if ocr_data and ocr_data.get("combined_text"):
+        ocr_combined = ocr_data["combined_text"]
+        ocr_images_detail = [
+            img for img in ocr_data.get("images", [])
+            if img.get("ocr_text")
+        ]
+        ocr_has_content = len(ocr_combined) > 20
+
+    # 正文是否"空洞"（需要依赖 OCR 补充）
+    desc_is_thin = len(desc) < 80 or (
+        len(desc) < 200 and
+        sum(len(m.group()) for m in re.finditer(r"#[^\s#]+", desc)) / max(len(desc), 1) > 0.4
+    )
 
     # ---- 执行各项分析 ----
     title_patterns = extract_title_patterns([title]) if title else {}
@@ -875,6 +906,59 @@ def gen_single_note_report(note_data, comments, nickname="", note_title=""):
             for ev in content_from_comments["evidence_comments"][:3]:
                 lines.append(f'- "{ev}"')
 
+    # ★ OCR 增强: 图片文字内容
+    if ocr_has_content:
+        section_label = "✅ OCR 数据" if ocr_data.get("ocr_summary", {}).get("avg_confidence", 0) >= 40 else "⚠️ OCR 数据（置信度较低）"
+        lines.append(f"\n### 📸 图片文字提取 {section_label}")
+        lines.append(f"\n> 以下内容从笔记的 {ocr_data['image_count']} 张图片中通过 OCR 识别提取，"
+                     f"平均置信度 {ocr_data['ocr_summary'].get('avg_confidence', 0)}%。")
+
+        # 当正文空洞时，OCR 文本是主要的信息来源
+        if desc_is_thin:
+            lines.append(f"\n> ⚠️ 正文仅 {len(desc)} 字（{'纯标签' if len(desc) < 30 else '信息量不足'}），"
+                         f"以下 OCR 提取的图片文字是理解笔记内容的主要依据。")
+            # 展示完整的 OCR 文本作为"实际内容"
+            ocr_summary_text = ocr_combined[:800]
+            if len(ocr_combined) > 800:
+                ocr_summary_text += f"\n\n...（共 {len(ocr_combined):,} 字符，完整内容见附录）"
+            lines.append(f"\n#### 图片中的实际内容")
+            lines.append(f"\n```text")
+            lines.append(ocr_summary_text)
+            lines.append(f"```")
+
+        # 逐图摘要
+        if ocr_images_detail:
+            lines.append(f"\n#### 逐图信息分布")
+            lines.append(f"\n| 图片 | 文字量(字) | 置信度 | 内容概要 |")
+            lines.append(f"|------|-----------|--------|----------|")
+            for img in ocr_images_detail[:10]:
+                text = img.get("ocr_text", "")
+                preview = text.replace("\n", " ")[:50]
+                lines.append(
+                    f"| 第{img['index']+1}张 | {img.get('ocr_word_count', 0)} | "
+                    f"{img.get('ocr_confidence', 0)}% | {preview}... |"
+                )
+
+            # 信息密度分析
+            word_counts = [img.get("ocr_word_count", 0) for img in ocr_images_detail]
+            if word_counts:
+                max_words = max(word_counts)
+                min_words = min(word_counts)
+                dense_imgs = [i+1 for i, w in enumerate(word_counts) if w > 30]
+                sparse_imgs = [i+1 for i, w in enumerate(word_counts) if w < 10]
+                lines.append(f"\n#### 信息密度洞察 ✅ 数据结论")
+                lines.append(f"- 文字量范围: {min_words}~{max_words} 字/图")
+                if dense_imgs:
+                    lines.append(f"- 🔍 **高信息密度图**: 第{', '.join(map(str, dense_imgs))}张 — 包含最多文字信息")
+                if sparse_imgs:
+                    lines.append(f"- 🎨 **低信息密度图**: 第{', '.join(map(str, sparse_imgs))}张 — 可能为纯视觉展示/氛围图")
+                if max_words > 0 and min_words >= 0:
+                    density_ratio = max_words / max(min_words, 1)
+                    if density_ratio > 5:
+                        lines.append(f"- ⚡ 信息密度差异 {density_ratio:.0f}x — 图片功能分化明显（信息图 vs 氛围图）")
+                    else:
+                        lines.append(f"- 📐 信息分布较均匀（差异 {density_ratio:.0f}x）")
+
     lines.append(f"\n### 信息金字塔")
     if asl_info.get("style") == "标签体":
         lines.append(f"- **总字符数**: {asl_info['total_chars']}字")
@@ -967,6 +1051,48 @@ def gen_single_note_report(note_data, comments, nickname="", note_title=""):
         else:
             lines.append(f"- **推断排版**: {'高密度教程型（每张图有文字标注）' if structure_info.get('has_number_heading', 0) > 0 else '轻量种草型（图片为主文字点缀）'}")
             lines.append(f"- **信息流**: 封面吸引 → 主体信息 → 细节补充 → CTA收尾（基于正文结构的通用推断）")
+
+        # ★ OCR 增强: 逐图内容流分析
+        if ocr_has_content and ocr_images_detail and len(ocr_images_detail) >= 2:
+            lines.append(f"\n### 📸 图片内容流分析 ✅ OCR 数据")
+            lines.append(f"\n> 基于每张图片实际 OCR 文字内容，还原真实的信息流结构：")
+            lines.append(f"\n| 序号 | 推测功能 | 文字量 | 内容摘要 |")
+            lines.append(f"|------|----------|--------|----------|")
+            for img in ocr_images_detail[:10]:
+                text = img.get("ocr_text", "")
+                wc = img.get("ocr_word_count", 0)
+                preview = text.replace("\n", " ")[:45]
+
+                # 推测每张图的功能角色
+                idx = img["index"]
+                total = len(ocr_images_detail)
+                if idx == 0:
+                    role = "🖼️ 封面/标题"
+                elif idx == total - 1:
+                    role = "📢 CTA/结尾引导"
+                elif wc > 40:
+                    role = "📊 核心信息图"
+                elif wc < 10:
+                    role = "🎨 氛围/展示图"
+                else:
+                    role = "📝 补充说明"
+
+                lines.append(f"| 第{idx+1}张 | {role} | {wc}字 | {preview} |")
+
+            # 信息流结构推断
+            flow_parts = []
+            for img in ocr_images_detail:
+                wc = img.get("ocr_word_count", 0)
+                if img["index"] == 0:
+                    flow_parts.append("封面吸引")
+                elif wc > 40:
+                    flow_parts.append("密集信息交付")
+                elif wc < 10:
+                    flow_parts.append("视觉缓冲")
+                else:
+                    flow_parts.append("轻量信息")
+            lines.append(f"\n**推断信息流**: {' → '.join(flow_parts)}")
+            lines.append(f"> 这是基于图片中实际文字内容的真实信息流（非元数据推测）")
 
     if emoji_info:
         lines.append(f"\n### Emoji 使用")
@@ -1150,6 +1276,25 @@ def gen_single_note_report(note_data, comments, nickname="", note_title=""):
     lines.append(f"```")
     lines.append(f"\n> ⚠️ 标注「文本推断」的结论基于正文+评论间接推测，建议配合原内容画面交叉验证。")
     lines.append(f"> ✅ 标注「数据结论」的结论基于互动数据和文本确定性统计。")
+    if ocr_has_content:
+        lines.append(f"> 📸 标注「OCR 数据」的结论基于图片 OCR 文字提取，置信度 {ocr_data.get('ocr_summary', {}).get('avg_confidence', 0)}%。")
+
+    # ★ OCR 附录：完整图片文字
+    if ocr_has_content and len(ocr_combined) > 500:
+        lines.append(f"\n---")
+        lines.append(f"\n# 📸 附录：图片 OCR 完整文字")
+        lines.append(f"\n> 以下为从 {ocr_data['image_count']} 张图片中 OCR 提取的完整文字内容。")
+        lines.append(f"> 平均置信度: {ocr_data['ocr_summary'].get('avg_confidence', 0)}% | "
+                     f"总字数: {ocr_data['ocr_summary'].get('total_words', 0)}")
+        lines.append(f"> ⚠️ OCR 结果可能存在错别字、漏字、格式偏差，建议人工校对后使用。")
+        lines.append(f"\n```text")
+        # 限制附录长度（太长的截断但标注）
+        if len(ocr_combined) > 3000:
+            lines.append(ocr_combined[:3000])
+            lines.append(f"\n...（截断，完整 {len(ocr_combined):,} 字符见原始输出文件）")
+        else:
+            lines.append(ocr_combined)
+        lines.append(f"```")
 
     return "\n".join(lines)
 
@@ -1159,14 +1304,20 @@ def gen_single_note_report(note_data, comments, nickname="", note_title=""):
 # ============================================================
 
 def analyze_viral_post(details_path=None, note_index=0, feed_id=None,
-                        xsec_token=None, url=None, nickname="", output_dir=".", port=18060):
+                        xsec_token=None, url=None, nickname="", output_dir=".", port=18060,
+                        use_ocr=False, ocr_keep_images=False):
     """
     执行单条笔记五维+三镜深度拆解。
+
+    Args:
+        use_ocr: 是否使用 OCR 提取图片文字（仅 URL 模式有效，无需 MCP 登录）
+        ocr_keep_images: OCR 后是否保留下载的图片
     """
     os.makedirs(output_dir, exist_ok=True)
 
     note_data = {}
     comments = []
+    ocr_data = None
 
     # ---- 数据获取 ----
     if details_path and os.path.exists(details_path):
@@ -1252,8 +1403,75 @@ def analyze_viral_post(details_path=None, note_index=0, feed_id=None,
                 xsec_token = xt_match.group(1)
                 print(f"   从URL提取到 xsec_token")
 
-        return analyze_viral_post(feed_id=note_id, xsec_token=xsec_token or "",
-                                   nickname=nickname, output_dir=output_dir, port=port)
+        # ★ OCR 模式：直接从 HTML 提取图片文字（无需 MCP 登录）
+        if use_ocr and HAS_OCR:
+            print()
+            print("📸 OCR 模式已启用 — 直接从页面提取图片文字")
+            print("-" * 40)
+            ocr_result = _extract_ocr(
+                url=url,
+                output_dir=os.path.join(output_dir, "_ocr"),
+                keep_images=ocr_keep_images,
+            )
+            if ocr_result:
+                ocr_data = ocr_result
+                print(f"   ✅ OCR 完成: {ocr_result['ocr_summary'].get('ocr_success', 0)} 张识别成功")
+                # 用 OCR 提取的元数据补充 note_data（如果 MCP 不可用）
+                ocr_meta = ocr_result.get("note_meta", {})
+                if not nickname and ocr_meta.get("nickname"):
+                    nickname = ocr_meta["nickname"]
+                if not note_data:
+                    note_data = {
+                        "title": ocr_meta.get("title", ""),
+                        "desc": ocr_meta.get("desc", ""),
+                        "type": ocr_meta.get("note_type", "normal"),
+                        "interactInfo": {
+                            "likedCount": str(ocr_meta.get("likes", 0)),
+                            "collectedCount": str(ocr_meta.get("collects", 0)),
+                            "commentCount": str(ocr_meta.get("comments_count", 0)),
+                            "sharedCount": str(ocr_meta.get("shares", 0)),
+                        },
+                        "time": 0,
+                    }
+            else:
+                print("   ⚠️ OCR 未获取到内容，回退到 MCP 模式")
+
+        # 回退到 MCP 获取元数据和评论（OCR 模式也可以同时走 MCP 拿评论）
+        if not note_data or not comments:
+            print(f"\n🔍 通过 MCP 获取笔记数据...")
+            try:
+                client = MCPClient(port=port)
+                raw = client.call_raw("get_feed_detail", {
+                    "feed_id": note_id,
+                    "xsec_token": xsec_token or "",
+                    "load_all_comments": True,
+                    "limit": 50,
+                    "click_more_replies": False,
+                }, timeout=90)
+                result = raw.get("result", {})
+                contents = result.get("content", [])
+                text_data = ""
+                for c in contents:
+                    if c.get("type") == "text":
+                        text_data += c.get("text", "")
+                if text_data:
+                    detail = json.loads(text_data)
+                else:
+                    detail = raw
+                note_data = detail.get("data", {}).get("note", detail)
+                comments_data = detail.get("data", {}).get("comments", detail.get("comments", {}))
+                comments = comments_data.get("list", []) if isinstance(comments_data, dict) else []
+                if not nickname:
+                    user = note_data.get("user", {})
+                    nickname = user.get("nickname", user.get("nickName", "未知博主"))
+            except Exception as e:
+                # OCR 模式下 MCP 失败是可以接受的（我们已经有 OCR 数据了）
+                if ocr_data:
+                    print(f"   ⚠️ MCP 获取失败: {e}")
+                    print(f"   → 继续使用 OCR 数据进行拆解（无评论数据）")
+                else:
+                    print(f"❌ 获取笔记失败: {e}")
+                    return None
     else:
         print("❌ 请指定数据来源：details_path、feed_id 或 url")
         return None
@@ -1274,7 +1492,7 @@ def analyze_viral_post(details_path=None, note_index=0, feed_id=None,
     print(f"{'='*60}\n")
 
     # ---- 生成报告 ----
-    md_content = gen_single_note_report(note_data, comments, nickname, title)
+    md_content = gen_single_note_report(note_data, comments, nickname, title, ocr_data=ocr_data)
 
     # 保存 MD → 过程文件（存档）
     process_dir = os.path.join(output_dir, "_过程文件", "原始素材")
@@ -1303,7 +1521,15 @@ def analyze_viral_post(details_path=None, note_index=0, feed_id=None,
         print(f"  ❌ DOCX 生成失败: {e}")
 
     print(f"\n✅ 五维+三镜拆解完成！")
-    return {"md_path": md_root_path, "docx_path": docx_path, "note_title": title}
+    result = {"md_path": md_root_path, "docx_path": docx_path, "note_title": title}
+    if ocr_data:
+        result["ocr_data"] = {
+            "image_count": ocr_data["image_count"],
+            "ocr_success": ocr_data["ocr_summary"].get("ocr_success", 0),
+            "avg_confidence": ocr_data["ocr_summary"].get("avg_confidence", 0),
+            "total_words": ocr_data["ocr_summary"].get("total_words", 0),
+        }
+    return result
 
 
 # ============================================================
@@ -1330,6 +1556,9 @@ if __name__ == "__main__":
 
   # 通过链接
   python analyze_viral_post.py --url "<小红书链接>" "Esther不二" -o ./output
+
+  # 通过链接 + OCR 提取图片文字（无需登录）
+  python analyze_viral_post.py --url "<链接>" "博主名" --ocr -o ./output
         """,
     )
     parser.add_argument("details_path", nargs="?", help="笔记详情 JSON 路径")
@@ -1340,6 +1569,10 @@ if __name__ == "__main__":
     parser.add_argument("--url", help="小红书链接（自动解析 note_id）")
     parser.add_argument("-o", "--output", default=".", help="输出目录")
     parser.add_argument("--port", type=int, default=18060, help="MCP 端口")
+    parser.add_argument("--ocr", action="store_true",
+                        help="启用 OCR 提取图片文字（无需 MCP 登录，仅 URL 模式有效）")
+    parser.add_argument("--ocr-keep-images", action="store_true",
+                        help="OCR 后保留下载的图片文件")
     args = parser.parse_args()
 
     if not args.details_path and not args.feed_id and not args.url:
@@ -1354,4 +1587,6 @@ if __name__ == "__main__":
         nickname=args.nickname,
         output_dir=args.output,
         port=args.port,
+        use_ocr=args.ocr,
+        ocr_keep_images=args.ocr_keep_images,
     )

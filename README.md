@@ -14,7 +14,7 @@
 
 ---
 
-> 基于 [xhs-blogger-analyzer](https://github.com/arraycto/xhs-blogger-analyzer)（MIT License）增删改。新增：多博主批量对比、赛道竞争格局报告、五维+三镜爆款拆解、评论区情感分析、发布时间热力图、29赛道分类、图片序列分析、数据可视化面板。
+> 基于 [xhs-blogger-analyzer](https://github.com/arraycto/xhs-blogger-analyzer)（MIT License）增删改。新增：多博主批量对比、赛道竞争格局报告、五维+三镜爆款拆解、评论区情感分析、发布时间热力图、29赛道分类、图片序列分析、数据可视化面板 v7（账号切换器 / 爆款TOP10 / 7维雷达图 / 规则化AI总结）。
 
 ---
 
@@ -48,7 +48,7 @@ python scripts/analyze_viral_post.py --url "<链接>" "<博主名>" -o ./output
 python run.py "目标博主名" --skip-env
 ```
 
-环境自动准备（Python 依赖 + MCP 二进制 + 扫码登录），所有模式自动生成数据可视化面板。
+环境自动准备（Python 依赖 + MCP 二进制 + 扫码登录）。所有模式自动生成可离线打开的数据可视化面板（`output/数据可视化面板.html`）。
 
 ---
 
@@ -85,9 +85,11 @@ python run.py "目标博主名" --skip-env
 │   ├── analyze.py            # Phase 2: 数据分析
 │   ├── generate_docs.py      # Phase 3: 文档骨架
 │   ├── deep_analyze.py       # Phase 3.5: AI深度分析 + 情感 + 热力图 + 赛道分类 + 图片序列
-│   ├── generate_dashboard.py # Phase 3.6: 可视化面板
-│   ├── analyze_viral_post.py # Phase 4: 单条爆款拆解
-│   ├── cross_analyze.py      # Phase 5: 跨博主对比
+│   ├── generate_dashboard.py       # Phase 3.6: 可视化面板（v7 JSON驱动）
+│   ├── dashboard_template_v7.html  # v7 可视化面板 HTML 模板
+│   ├── analyze_viral_post.py       # Phase 4: 单条爆款拆解
+│   ├── extract_post_images_ocr.py  # 图文OCR提取（无需登录）
+│   ├── cross_analyze.py            # Phase 5: 跨博主对比
 │   └── utils/
 │       ├── common.py         # parse_count / safe_filename / ms_to_datetime
 │       ├── mcp_client.py     # MCP HTTP 封装

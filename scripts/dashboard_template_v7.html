@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小红书内容分析看板 v7</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Design Tokens
+   ============================================================ */
+:root {
+  --bg:          #F8F6F2;
+  --surface:     #FFFFFF;
+  --surface-alt: #F2EFEA;
+  --accent:      #C2693A;
+  --accent-soft: rgba(194,105,58,0.08);
+  --text:        #1C1B18;
+  --text-secondary: #6E6A63;
+  --text-muted:  #9D9890;
+  --border:      #E8E4DC;
+  --border-light:#F0EDE6;
+  --radius:      10px;
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.03);
+  --shadow:      0 1px 4px rgba(0,0,0,0.05);
+  --green:       #5C8D6E;
+  --amber:       #C49B3F;
+  --red:         #B84A3C;
+  --font-sans:   'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  --font-mono:   'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace;
+  --max-w:       1320px;
+  --nav-h:       48px;
+}
+
+/* ============================================================
+   Dark Theme
+   ============================================================ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:          #1C1B18;
+    --surface:     #282724;
+    --surface-alt: #302E2B;
+    --accent:      #D48354;
+    --accent-soft: rgba(212,131,84,0.12);
+    --text:        #EDEAE4;
+    --text-secondary: #A6A096;
+    --text-muted:  #6E6A62;
+    --border:      #3D3A35;
+    --border-light:#33312D;
+    --shadow-sm:   0 1px 2px rgba(0,0,0,0.15);
+    --shadow:      0 1px 4px rgba(0,0,0,0.2);
+    --green:       #7BAF86;
+    --amber:       #D4AD4F;
+    --red:         #C86052;
+  }
+}
+
+/* ============================================================
+   Reset
+   ============================================================ */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; -webkit-text-size-adjust:100%; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.3s, color 0.3s;
+}
+
+/* ============================================================
+   Header
+   ============================================================ */
+.hdr {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.hdr-left h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.hdr-left .sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* ============================================================
+   Account Switcher
+   ============================================================ */
+.switcher-wrap {
+  position: relative;
+}
+.switcher-wrap select {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 34px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s;
+  min-width: 160px;
+}
+.switcher-wrap select:hover { border-color: var(--accent); }
+.switcher-wrap select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.switcher-wrap::after {
+  content: '▾';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+   KPI Cards
+   ============================================================ */
+.kpi-section {
+  padding: 16px 28px;
+  max-width: var(--max-w);
+  margin: 0 auto;
+}
+.kpi-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 10px;
+}
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s;
+}
+.kpi-card:hover { box-shadow: var(--shadow); }
+.kpi-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.kpi-value {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 2px 0 1px;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-value .unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 2px;
+}
+.kpi-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* ============================================================
+   Sticky Nav
+   ============================================================ */
+.tab-nav {
+  display: flex;
+  gap: 0;
+  padding: 0 28px;
+  max-width: var(--max-w);
+  margin: 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.3s;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tab-nav.scrolled { border-bottom-color: var(--border); }
+.tab-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 10px 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+section { scroll-margin-top: calc(var(--nav-h) + 20px); }
+
+/* ============================================================
+   Main Content
+   ============================================================ */
+.main {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 20px 28px 40px;
+}
+.sec-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 28px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--accent);
+  display: inline-block;
+  letter-spacing: -0.2px;
+}
+.sec-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: -8px 0 14px;
+}
+
+/* ============================================================
+   Card Grid
+   ============================================================ */
+.cg {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 14px;
+}
+.cg-2 { grid-template-columns: 1fr 1fr; }
+.cg-3 { grid-template-columns: repeat(3, 1fr); }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.card.full { grid-column: 1 / -1; }
+.card-hd {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 3px;
+  letter-spacing: -0.2px;
+}
+.card-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.card canvas { max-height: 260px; }
+
+/* ============================================================
+   Data Table
+   ============================================================ */
+.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.tbl th {
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.tbl td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+.tbl tr:nth-child(even) td { background: var(--surface-alt); }
+.tbl .num { font-family: var(--font-mono); font-size: 11px; text-align: right; }
+.tbl .ttl { max-width: 240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tbl .ttl:hover { overflow:visible; white-space:normal; word-break:break-all; }
+
+/* Burst level badges */
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+.badge-super { background: rgba(184,74,60,0.12); color: var(--red); }
+.badge-big   { background: rgba(196,155,63,0.12); color: var(--amber); }
+.badge-small { background: rgba(92,141,110,0.12); color: var(--green); }
+.badge-normal{ color: var(--text-muted); }
+
+/* ============================================================
+   Heatmap
+   ============================================================ */
+.hm-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.hm {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.hm th {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  padding: 5px 7px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.hm td {
+  padding: 7px 9px;
+  text-align: center;
+  border-radius: 4px;
+  cursor: default;
+  transition: transform 0.12s;
+}
+.hm td.data:hover { transform: scale(1.1); z-index: 2; }
+.hm td.best { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+
+/* Tooltip */
+.tip {
+  display: none;
+  position: fixed;
+  background: var(--text);
+  color: var(--bg);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.tip.on { display: block; }
+
+/* ============================================================
+   Insight Summary Cards
+   ============================================================ */
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+.insight-block { margin-bottom: 14px; }
+.insight-block h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--accent);
+}
+.insight-block ul {
+  list-style: none;
+  padding: 0;
+}
+.insight-block li {
+  font-size: 12px;
+  padding: 4px 0;
+  padding-left: 16px;
+  position: relative;
+  color: var(--text-secondary);
+}
+.insight-block li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+}
+.no-data {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ============================================================
+   Alerts
+   ============================================================ */
+.notice {
+  background: rgba(196,155,63,0.08);
+  border: 1px solid rgba(196,155,63,0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.notice strong { color: var(--amber); }
+
+/* ============================================================
+   Comments
+   ============================================================ */
+.comment-item {
+  font-size: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+}
+.comment-item:last-child { border-bottom: none; }
+
+/* ============================================================
+   Footer
+   ============================================================ */
+.footer {
+  text-align: center;
+  padding: 24px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+}
+
+/* ============================================================
+   Responsive: ≤1199px (tablet)
+   ============================================================ */
+@media (max-width: 1199px) {
+  .cg { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .cg-2, .cg-3 { grid-template-columns: 1fr; }
+  .hdr, .kpi-section, .main, .tab-nav { padding-left: 18px; padding-right: 18px; }
+  .kpi-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+}
+
+/* ============================================================
+   Responsive: ≤767px (mobile)
+   ============================================================ */
+@media (max-width: 767px) {
+  .hdr { padding: 14px 14px; flex-direction: column; align-items: flex-start; }
+  .hdr-left h1 { font-size: 17px; }
+  .switcher-wrap select { width: 100%; }
+  .kpi-section { padding: 10px 14px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi-value { font-size: 22px; }
+  .main { padding: 12px 14px 28px; }
+  .cg { grid-template-columns: 1fr; }
+  .card { padding: 14px; }
+  .card canvas { max-height: 220px; }
+  .sec-title { font-size: 14px; }
+  .tab-nav { padding: 0 14px; overflow-x: auto; }
+  .tab-btn { padding: 9px 12px; font-size: 11px; }
+  .tbl { font-size: 11px; }
+  .tbl .ttl { max-width: 160px; }
+  .insight-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   Chart error fallback
+   ============================================================ */
+.chart-error {
+  text-align: center;
+  padding: 30px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.chart-error::before {
+  content: '⚠️ ';
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     Header + Account Switcher
+     ============================================================ -->
+<div class="hdr">
+  <div class="hdr-left">
+    <h1>📊 小红书内容分析看板</h1>
+    <p class="sub" id="hdr-sub"></p>
+  </div>
+  <div class="switcher-wrap">
+    <select id="blogger-switcher"></select>
+  </div>
+</div>
+
+<!-- ============================================================
+     KPI Cards
+     ============================================================ -->
+<div class="kpi-section" id="kpi-section"></div>
+
+<!-- ============================================================
+     Sticky Nav
+     ============================================================ -->
+<nav class="tab-nav" id="tab-nav">
+  <a href="#sec-overview" class="tab-btn active">账号总览</a>
+  <a href="#sec-strategy" class="tab-btn">内容策略</a>
+  <a href="#sec-viral" class="tab-btn">爆款引擎</a>
+  <a href="#sec-heatmap" class="tab-btn">发布时间</a>
+  <a href="#sec-comments" class="tab-btn">评论洞察</a>
+  <a href="#sec-insights" class="tab-btn">策略总结</a>
+</nav>
+
+<!-- ============================================================
+     Main Sections
+     ============================================================ -->
+<div class="main">
+
+  <!-- ====== 一、账号总览 ====== -->
+  <section id="sec-overview">
+    <div class="sec-title">一、账号总览</div>
+    <div class="cg">
+      <div class="card">
+        <div class="card-hd">📋 账号基础数据</div>
+        <div class="card-sub">来自小红书主页与全量笔记统计</div>
+        <div class="tbl-wrap" id="overview-table"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">🏷️ 内容赛道分布</div>
+        <div class="card-sub">各领域笔记数量占比</div>
+        <canvas id="trackChart"></canvas>
+      </div>
+    </div>
+    <div class="cg" style="margin-top:14px;" id="radar-section">
+      <div class="card full">
+        <div class="card-hd">🎯 博主能力雷达 · 横向对比</div>
+        <div class="card-sub" id="radar-sub">七维度分析评分（基于实际数据归一化计算，非平台官方指标）</div>
+        <div id="radar-cross-notice"></div>
+        <div style="max-width:520px;margin:0 auto;">
+          <canvas id="radarChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== 二、内容策略 ====== -->
+  <section id="sec-strategy">
+    <div class="sec-title">二、内容策略</div>
+    <div id="notice-area"></div>
+    <div class="cg">
+      <div class="card">
+        <div class="card-hd">🎣 前3秒钩子策略</div>
+        <div class="card-sub">吸引注意力的方式分布</div>
+        <canvas id="hookChart"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-hd">📝 标题模式偏好</div>
+        <div class="card-sub">8 种标题策略使用频率（%）</div>
+        <canvas id="patternChart"></canvas>
+      </div>
+      <div class="card" id="cta-card">
+        <div class="card-hd">📢 CTA 引导策略</div>
+        <div class="card-sub">行动号召类型分布（%）</div>
+        <canvas id="ctaChart"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-hd">🎬 内容形式</div>
+        <div class="card-sub">视频 / 图文占比</div>
+        <canvas id="formatChart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== 三、爆款引擎 ====== -->
+  <section id="sec-viral">
+    <div class="sec-title">三、爆款引擎</div>
+    <div class="cg">
+      <div class="card">
+        <div class="card-hd">📊 藏赞比 & 爆款率</div>
+        <div class="card-sub">收藏÷点赞 ×100 vs 爆款（&gt;3×均赞）占比</div>
+        <canvas id="viralBarChart"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-hd">❤️ 互动构成</div>
+        <div class="card-sub">点赞 / 收藏 / 评论 占比（%）</div>
+        <canvas id="interactChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Burst TOP10 -->
+    <div class="cg" style="margin-top:14px;">
+      <div class="card full">
+        <div class="card-hd">🏆 爆款 TOP10</div>
+        <div class="card-sub">按点赞数降序 · 标题过长可 hover 查看完整内容</div>
+        <div class="tbl-wrap" id="top10-table"></div>
+      </div>
+    </div>
+
+    <!-- Burst Feature Summary -->
+    <div class="cg" style="margin-top:14px;">
+      <div class="card full">
+        <div class="card-hd">🔍 爆款特征总结</div>
+        <div class="card-sub">基于当前分析结果的规则化总结</div>
+        <div class="tbl-wrap" id="burst-summary-table"></div>
+        <div class="notice" id="burst-notice" style="margin-top:10px;margin-bottom:0;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== 四、最佳发布时间 ====== -->
+  <section id="sec-heatmap">
+    <div class="sec-title">四、最佳发布时间</div>
+    <p class="sec-desc" id="heatmap-desc">基于全量笔记发布时间的分布统计</p>
+    <div class="cg" id="heatmap-area"></div>
+  </section>
+
+  <!-- ====== 五、评论洞察 ====== -->
+  <section id="sec-comments">
+    <div class="sec-title">五、评论洞察</div>
+    <div class="cg">
+      <div class="card full">
+        <div class="card-hd">💬 评论情感分布</div>
+        <div class="card-sub">正向 / 中性 / 负向占比（%）</div>
+        <canvas id="sentimentChart"></canvas>
+      </div>
+    </div>
+    <div class="cg cg-2" id="comment-examples" style="margin-top:14px;"></div>
+  </section>
+
+  <!-- ====== 六、AI 策略总结 ====== -->
+  <section id="sec-insights">
+    <div class="sec-title">六、内容策略结论</div>
+    <p class="sec-desc">基于已有分析数据的规则化总结，不依赖外部 LLM</p>
+    <div class="card full" id="insights-content"></div>
+  </section>
+
+</div>
+
+<!-- ============================================================
+     Footer
+     ============================================================ -->
+<div class="footer">
+  <p>Viral Sweet Potato Content Breakdown v7 &nbsp;|&nbsp; <span id="footer-info"></span></p>
+</div>
+
+<!-- ============================================================
+     Heatmap tooltip
+     ============================================================ -->
+<div class="tip" id="tip"></div>
+
+<!-- ============================================================
+     Data Payload
+     ============================================================ -->
+<script id="dashboard-data" type="application/json">__DATA_JSON__</script>
+
+<!-- ============================================================
+     Chart.js (local + CDN fallback)
+     ============================================================ -->
+<script>__CHARTJS__</script>
+<script>
+if (typeof Chart === 'undefined') {
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+  document.head.appendChild(s);
+}
+</script>
+
+<!-- ============================================================
+     Application
+     ============================================================ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     Constants
+     ============================================================ */
+  var PALETTE = ['#C2693A','#5C8D6E','#7B8EA8','#B5838D','#8B7E74','#C4956A','#9B8EC4','#6E8B7B'];
+  var TITLE_PATTERNS = ['数字型','疑问型','感叹型','教程型','列表型','对比型','故事型','悬念型'];
+  var CTA_LABELS = ['关注','收藏','点赞','评论','转发','私信'];
+  var RADAR_DIMS = ['赛道覆盖','标题能力','钩子能力','爆款能力','收藏驱动','评论互动','情绪正向度'];
+
+  /* ============================================================
+     State
+     ============================================================ */
+  var PAYLOAD = null;
+  var currentIdx = 'all';   // 'all' | 0 | 1 | 2 ...
+  var allCharts = {};       // { canvasId: Chart }
+
+  /* ============================================================
+     Parse data
+     ============================================================ */
+  try {
+    var el = document.getElementById('dashboard-data');
+    PAYLOAD = el ? JSON.parse(el.textContent) : null;
+  } catch(e) {
+    PAYLOAD = null;
+  }
+
+  /* ============================================================
+     Helpers
+     ============================================================ */
+  // ★ NaN-proof number → safe number (0 as fallback)
+  function safeN(v) {
+    if (v == null) return 0;
+    var n = Number(v);
+    return isNaN(n) || !isFinite(n) ? 0 : n;
+  }
+
+  function fmt(n, decimals) {
+    if (n == null || (typeof n === 'number' && (isNaN(n) || !isFinite(n)))) return '—';
+    if (decimals != null) return Number(n).toFixed(decimals);
+    return Number(n).toLocaleString('zh-CN');
+  }
+
+  function esc(str) {
+    if (str == null) return '';
+    if (typeof str === 'number' && (isNaN(str) || !isFinite(str))) return '—';
+    var div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+  }
+
+  function color(i) { return PALETTE[i % PALETTE.length]; }
+  function alpha(c, a) {
+    if (c.startsWith('#') && c.length === 7) {
+      var r = parseInt(c.slice(1,3),16);
+      var g = parseInt(c.slice(3,5),16);
+      var b = parseInt(c.slice(5,7),16);
+      return 'rgba('+r+','+g+','+b+','+a+')';
+    }
+    return c;
+  }
+
+  function chartOpts(extra) {
+    var o = {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position:'bottom', labels:{ font:{ family:'Inter, Noto Sans SC, sans-serif', size:10 }, padding:12, usePointStyle:true } }
+      }
+    };
+    if (extra && extra.scales) o.scales = extra.scales;
+    if (extra && extra.plugins) Object.assign(o.plugins, extra.plugins);
+    return o;
+  }
+
+  function yPct() {
+    return { scales: { y: { beginAtZero:true, max:100, ticks:{ callback:function(v){ return v+'%'; } } } } };
+  }
+
+  function yCount(suffix) {
+    return { scales: { y: { beginAtZero:true, ticks:{ callback: suffix ? function(v){ return v+suffix; } : undefined } } } };
+  }
+
+  // Safe destroy
+  function destroyCharts() {
+    Object.keys(allCharts).forEach(function(k) {
+      try { allCharts[k].destroy(); } catch(e) { /* ignore */ }
+      delete allCharts[k];
+    });
+  }
+
+  // Canvas helper — auto-sanitizes NaN/Infinity from chart data
+  function newChart(id, type, data, opts) {
+    var canvas = document.getElementById(id);
+    if (!canvas) return null;
+    // Destroy existing chart on this canvas (if switching bloggers)
+    if (allCharts[id]) {
+      try { allCharts[id].destroy(); } catch(e) { /* ignore */ }
+      delete allCharts[id];
+    }
+    // Strip NaN/Infinity from all dataset values
+    if (data && data.datasets) {
+      data.datasets.forEach(function(ds) {
+        if (ds.data) {
+          for (var i = 0; i < ds.data.length; i++) {
+            ds.data[i] = safeN(ds.data[i]);
+          }
+        }
+      });
+    }
+    var chart = new Chart(canvas, { type: type, data: data, options: chartOpts(opts) });
+    allCharts[id] = chart;
+    return chart;
+  }
+
+  /* ============================================================
+     Get blogger(s) by selection
+     ============================================================ */
+  function selected() {
+    if (!PAYLOAD || !PAYLOAD.bloggers) return [];
+    if (currentIdx === 'all') return PAYLOAD.bloggers;
+    var i = parseInt(currentIdx);
+    var b = PAYLOAD.bloggers[i];
+    return b ? [b] : [];
+  }
+
+  /* ============================================================
+     Header & Footer
+     ============================================================ */
+  function renderHeader() {
+    var names = (PAYLOAD && PAYLOAD.bloggers) ? PAYLOAD.bloggers.map(function(b){return b.name;}) : [];
+    document.getElementById('hdr-sub').textContent =
+      names.join(' · ') + '  |  ' + (PAYLOAD ? PAYLOAD.generatedAt : '') + '  |  v7.0';
+    document.getElementById('footer-info').textContent =
+      (PAYLOAD ? PAYLOAD.bloggerCount : 0) + ' 位博主  |  ' + (PAYLOAD ? PAYLOAD.generatedAt : '');
+  }
+
+  /* ============================================================
+     Account Switcher
+     ============================================================ */
+  function renderSwitcher() {
+    var sel = document.getElementById('blogger-switcher');
+    var bloggers = PAYLOAD ? PAYLOAD.bloggers : [];
+    if (bloggers.length <= 1) {
+      sel.style.display = 'none';
+    } else {
+      sel.style.display = '';
+    }
+    sel.innerHTML = '';
+    var optAll = document.createElement('option');
+    optAll.value = 'all';
+    optAll.textContent = '全部博主';
+    sel.appendChild(optAll);
+    bloggers.forEach(function(b, i) {
+      var o = document.createElement('option');
+      o.value = i;
+      o.textContent = b.name;
+      sel.appendChild(o);
+    });
+    sel.value = currentIdx;
+    sel.addEventListener('change', function() {
+      currentIdx = this.value;
+      refreshAll();
+    });
+  }
+
+  /* ============================================================
+     KPI Cards
+     ============================================================ */
+  function renderKPI() {
+    var bloggers = selected();
+    var html = '';
+    bloggers.forEach(function(b) {
+      var s = b.stats || {};
+      html += '<div class="kpi-group" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow-sm);">';
+      if (bloggers.length > 1 || PAYLOAD.bloggerCount > 1) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:8px;">' + esc(b.name) + '</div>';
+      }
+      html += '<div class="kpi-grid">';
+      html += kpiItem('笔记数',   fmt(s.total_notes),         '篇', s.freq_label);
+      html += kpiItem('平均点赞', fmt(s.avg_likes),           '',   '共 ' + fmt(s.total_likes) + ' 赞');
+      html += kpiItem('平均收藏', fmt(s.avg_collects),        '',   '共 ' + fmt(s.total_collects) + ' 收藏');
+      html += kpiItem('平均评论', fmt(s.avg_comments),        '',   '共 ' + fmt(s.total_comments) + ' 评论');
+      html += kpiItem('篇均互动', fmt(s.avg_interact),        '次', '赞+藏+评');
+      html += kpiItem('爆款率',   fmt(s.hit_rate, 1),         '%',  '≥均赞×3 = ' + fmt(s.hit_threshold) + ' 赞');
+      html += kpiItem('藏赞比',   fmt(s.sl_ratio, 2),         '',   s.ratio_label);
+      html += kpiItem('评论情绪', (s.sentiment_score>=0?'+':'') + fmt(s.sentiment_score,2), '', s.sentiment_label);
+      html += '</div></div>';
+    });
+    document.getElementById('kpi-section').innerHTML = html || '<div class="no-data">暂无数据</div>';
+  }
+
+  function kpiItem(label, value, unit, desc) {
+    return '<div class="kpi-card">' +
+      '<div class="kpi-label">' + esc(label) + '</div>' +
+      '<div class="kpi-value">' + esc(value) + (unit ? '<span class="unit">' + esc(unit) + '</span>' : '') + '</div>' +
+      '<div class="kpi-desc">' + esc(desc) + '</div>' +
+    '</div>';
+  }
+
+  /* ============================================================
+     Section 1 — 账号总览
+     ============================================================ */
+  function renderOverview() {
+    var bloggers = selected();
+    if (!bloggers.length) return;
+
+    // Data table — first blogger
+    var b = bloggers[0];
+    var s = b.stats || {};
+    var rows = [
+      ['博主',       esc(b.name),                       '笔记数',   fmt(s.total_notes)],
+      ['视频 / 图文', fmt(s.video_count)+' / '+fmt(s.normal_count), '更新频率', s.freq_label || '—'],
+      ['均赞',       fmt(s.avg_likes),                   '均收藏',   fmt(s.avg_collects)],
+      ['均评论',     fmt(s.avg_comments),                '爆款率',   fmt(s.hit_rate,1) + '%'],
+      ['藏赞比',     fmt(s.sl_ratio,2) + ' (' + (s.ratio_label||'') + ')', '情感分', (s.sentiment_score>=0?'+':'') + fmt(s.sentiment_score,2)],
+    ];
+    var tbl = '<table class="tbl"><tbody>';
+    rows.forEach(function(r) {
+      tbl += '<tr><td>' + r[0] + '</td><td class="num">' + r[1] + '</td><td>' + r[2] + '</td><td class="num">' + r[3] + '</td></tr>';
+    });
+    tbl += '</tbody></table>';
+    document.getElementById('overview-table').innerHTML = tbl;
+
+    // Track doughnut (first blogger)
+    var tracks = (b.content && b.content.tracks) ? b.content.tracks : [];
+    if (tracks.length) {
+      newChart('trackChart', 'doughnut', {
+        labels: tracks.map(function(t){ return t.name; }),
+        datasets: [{ data: tracks.map(function(t){ return t.count; }), backgroundColor: tracks.map(function(_,i){ return color(i); }) }]
+      });
+    } else {
+      document.getElementById('trackChart').parentNode.querySelector('.card-sub').insertAdjacentHTML('afterend', '<div class="no-data">暂无赛道数据</div>');
+    }
+
+    // Radar (multi-blogger only)
+    var radarSection = document.getElementById('radar-section');
+    if (PAYLOAD && PAYLOAD.bloggers && PAYLOAD.bloggers.length >= 2 && currentIdx === 'all') {
+      radarSection.style.display = '';
+      // Cross-track detection
+      var tracks = PAYLOAD.bloggers.map(function(b) {
+        return (b.content && b.content.tracks && b.content.tracks.length) ? b.content.tracks[0].name : '未知';
+      });
+      var sameTrack = tracks.every(function(t) { return t === tracks[0]; });
+      var crossNotice = document.getElementById('radar-cross-notice');
+      if (!sameTrack) {
+        crossNotice.innerHTML = '<div class="notice" style="margin-bottom:10px;"><strong>📌 跨赛道对比</strong> — 博主分属不同赛道（' +
+          tracks.map(function(t, i) { return PAYLOAD.bloggers[i].name + ': ' + t; }).join(' / ') +
+          '），雷达图反映的是各自赛道内的内容能力，非直接竞争对比。</div>';
+      } else {
+        crossNotice.innerHTML = '';
+      }
+      renderRadar();
+    } else {
+      radarSection.style.display = 'none';
+    }
+  }
+
+  /* ============================================================
+     Radar Chart (7-dimension)
+     ============================================================ */
+  function renderRadar() {
+    var bloggers = PAYLOAD.bloggers;
+    // Normalize each dimension to 0-100
+    function normDim(getter) {
+      var vals = bloggers.map(getter).map(function(v){ return safeN(v); });
+      var max = Math.max.apply(null, vals);
+      if (!max || max <= 0 || isNaN(max) || !isFinite(max)) return vals.map(function(){ return 0; });
+      return vals.map(function(v){ return Math.min(100, Math.round(v/max*100)); });
+    }
+
+    var datasets = bloggers.map(function(b, i) {
+      var s = b.stats || {};
+      var ct = b.content || {};
+      var ins = b.insights || {};
+      return {
+        label: b.name,
+        data: [
+          normDim(function(bb){ return (bb.content && bb.content.tracks) ? bb.content.tracks.length : 0; })[i],
+          normDim(function(bb){ var tp = bb.content && bb.content.title_patterns; if (!tp) return 0; var mx=0; tp.forEach(function(p){ if(p.pct>mx) mx=p.pct; }); return mx; })[i],
+          normDim(function(bb){ return (bb.content && bb.content.hooks) ? bb.content.hooks.reduce(function(s,h){return s+h.count;},0) : 0; })[i],
+          normDim(function(bb){ return (bb.stats && bb.stats.hit_rate) || 0; })[i],
+          normDim(function(bb){ return (bb.stats && bb.stats.sl_ratio) ? bb.stats.sl_ratio*100 : 0; })[i],
+          normDim(function(bb){ return (bb.stats && bb.stats.avg_comments) || 0; })[i],
+          normDim(function(bb){ var sc = (bb.sentiment && bb.sentiment.score) || 0; return Math.round((sc+1)/2*100); })[i],
+        ],
+        borderColor: color(i),
+        backgroundColor: alpha(color(i), 0.08),
+        pointBackgroundColor: color(i),
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        borderWidth: 2,
+        fill: true
+      };
+    });
+
+    newChart('radarChart', 'radar', { labels: RADAR_DIMS, datasets: datasets }, {
+      scales: {
+        r: {
+          beginAtZero: true, max: 100,
+          ticks: { stepSize:20, backdropColor:'transparent', font:{size:9} },
+          pointLabels: { font:{size:10} }
+        }
+      }
+    });
+  }
+
+  /* ============================================================
+     Section 2 — 内容策略
+     ============================================================ */
+  function renderStrategy() {
+    var bloggers = selected();
+    if (!bloggers.length) return;
+
+    // Notice
+    var maxEmpty = 0;
+    bloggers.forEach(function(b) { var p = (b.content && b.content.desc_empty_pct) || 0; if (p > maxEmpty) maxEmpty = p; });
+    document.getElementById('notice-area').innerHTML = maxEmpty > 40
+      ? '<div class="notice"><strong>⚠️ 正文覆盖不足</strong> — 部分笔记正文为零文案/纯标签。CTA、内容结构分析受限，标题和钩子分析不受影响。</div>'
+      : '';
+
+    // Hook chart
+    var allHooks = {};
+    bloggers.forEach(function(b) {
+      (b.content && b.content.hooks ? b.content.hooks : []).forEach(function(h) { allHooks[h.name] = true; });
+    });
+    var hLabels = Object.keys(allHooks).sort(function(a, b) {
+      var sa = 0, sb = 0;
+      bloggers.forEach(function(bb) {
+        (bb.content && bb.content.hooks ? bb.content.hooks : []).forEach(function(h) {
+          if (h.name === a) sa += h.count; if (h.name === b) sb += h.count;
+        });
+      });
+      return sb - sa;
+    });
+    newChart('hookChart', 'bar', {
+      labels: hLabels,
+      datasets: bloggers.map(function(b, i) {
+        var hooks = b.content && b.content.hooks ? b.content.hooks : [];
+        return {
+          label: b.name,
+          data: hLabels.map(function(h) { var f = hooks.filter(function(x){ return x.name===h; })[0]; return f ? f.count : 0; }),
+          backgroundColor: color(i)
+        };
+      })
+    }, yCount('次'));
+
+    // Pattern chart
+    newChart('patternChart', 'bar', {
+      labels: TITLE_PATTERNS,
+      datasets: bloggers.map(function(b, i) {
+        var tp = b.content && b.content.title_patterns ? b.content.title_patterns : [];
+        return {
+          label: b.name,
+          data: TITLE_PATTERNS.map(function(p) { var f = tp.filter(function(x){ return x.name===p; })[0]; return f ? f.pct : 0; }),
+          backgroundColor: color(i)
+        };
+      })
+    }, yPct());
+
+    // CTA chart
+    var allZero = bloggers.every(function(b) {
+      return b.content && b.content.cta_all_zero;
+    });
+    if (allZero) {
+      document.getElementById('cta-card').innerHTML =
+        '<div class="card-hd">📢 CTA 引导策略</div><div class="card-sub">行动号召类型分布</div>' +
+        '<div class="notice"><strong>📝 正文不足</strong> — 笔记正文以标签为主，无法提取 CTA。标题和钩子分析不受影响。</div>';
+    } else {
+      // restore canvas
+      document.getElementById('cta-card').innerHTML =
+        '<div class="card-hd">📢 CTA 引导策略</div><div class="card-sub">行动号召类型分布（%）</div><canvas id="ctaChart"></canvas>';
+      newChart('ctaChart', 'bar', {
+        labels: CTA_LABELS,
+        datasets: bloggers.map(function(b, i) {
+          var cta = b.content && b.content.cta ? b.content.cta : [];
+          return {
+            label: b.name,
+            data: CTA_LABELS.map(function(l) { var f = cta.filter(function(x){ return x.label===l; })[0]; return f ? f.pct : 0; }),
+            backgroundColor: color(i)
+          };
+        })
+      }, yPct());
+    }
+
+    // Format chart
+    newChart('formatChart', 'bar', {
+      labels: ['视频', '图文'],
+      datasets: bloggers.map(function(b, i) {
+        var f = b.content && b.content.format ? b.content.format : { video:0, normal:0 };
+        return { label: b.name, data: [f.video||0, f.normal||0], backgroundColor: color(i) };
+      })
+    }, yCount());
+  }
+
+  /* ============================================================
+     Section 3 — 爆款引擎
+     ============================================================ */
+  function renderViral() {
+    var bloggers = selected();
+    if (!bloggers.length) return;
+
+    // Viral bar
+    newChart('viralBarChart', 'bar', {
+      labels: ['藏赞比 (×100)', '爆款率 (%)'],
+      datasets: bloggers.map(function(b, i) {
+        var s = b.stats || {};
+        return {
+          label: b.name,
+          data: [(s.sl_ratio||0)*100, s.hit_rate||0],
+          backgroundColor: [color(i), alpha(color(i), 0.35)]
+        };
+      })
+    }, yCount());
+
+    // Interact bar
+    newChart('interactChart', 'bar', {
+      labels: ['点赞', '收藏', '评论'],
+      datasets: bloggers.map(function(b, i) {
+        var vi = b.viral && b.viral.interact ? b.viral.interact : { likes_pct:0, collects_pct:0, comments_pct:0 };
+        return {
+          label: b.name,
+          data: [vi.likes_pct||0, vi.collects_pct||0, vi.comments_pct||0],
+          backgroundColor: color(i)
+        };
+      })
+    }, yPct());
+
+    // TOP10 table
+    renderTop10(bloggers);
+
+    // Burst summary
+    renderBurstSummary(bloggers);
+  }
+
+  function renderTop10(bloggers) {
+    // Use first blogger's top10 (or all combined when 'all')
+    var allTop10 = [];
+    bloggers.forEach(function(b) {
+      var t10 = b.viral && b.viral.top10 ? b.viral.top10 : [];
+      t10.forEach(function(note) {
+        allTop10.push({ blogger: b.name, note: note });
+      });
+    });
+    allTop10.sort(function(a, b) { return (b.note.likes||0) - (a.note.likes||0); });
+    allTop10 = allTop10.slice(0, 10);
+
+    var html = '<table class="tbl"><thead><tr>' +
+      '<th>#</th><th>博主</th><th>标题</th><th>点赞</th><th>收藏</th><th>评论</th>' +
+      '<th>互动</th><th>爆款等级</th><th>发布时间</th>' +
+    '</tr></thead><tbody>';
+
+    if (!allTop10.length) {
+      html += '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:14px;">暂无数据</td></tr>';
+    } else {
+      allTop10.forEach(function(item) {
+        var n = item.note;
+        var badgeClass = '';
+        if (n.burst_level.indexOf('超级') >= 0) badgeClass = 'badge-super';
+        else if (n.burst_level.indexOf('大爆款') >= 0) badgeClass = 'badge-big';
+        else if (n.burst_level.indexOf('小爆款') >= 0) badgeClass = 'badge-small';
+        else badgeClass = 'badge-normal';
+
+        html += '<tr>' +
+          '<td class="num">' + (n.rank||'—') + '</td>' +
+          '<td>' + esc(item.blogger) + '</td>' +
+          '<td class="ttl" title="' + esc(n.title) + '">' + esc(n.title) + '</td>' +
+          '<td class="num">' + fmt(n.likes) + '</td>' +
+          '<td class="num">' + fmt(n.collects) + '</td>' +
+          '<td class="num">' + fmt(n.comments) + '</td>' +
+          '<td class="num">' + fmt(n.interact) + '</td>' +
+          '<td><span class="badge ' + badgeClass + '">' + esc(n.burst_level) + '</span></td>' +
+          '<td>' + esc(n.time_str||'—') + '</td>' +
+        '</tr>';
+      });
+    }
+    html += '</tbody></table>';
+    document.getElementById('top10-table').innerHTML = html;
+  }
+
+  function renderBurstSummary(bloggers) {
+    var b = bloggers[0]; // first blogger for summary
+    if (!b) return;
+    var ins = b.insights || {};
+    if (!ins.has_enough_data) {
+      document.getElementById('burst-summary-table').innerHTML = '';
+      document.getElementById('burst-notice').innerHTML = '<strong>样本不足</strong> — 笔记数量 &lt; 5 篇，无法可靠判断爆款规律。';
+      return;
+    }
+    document.getElementById('burst-notice').innerHTML = '';
+
+    var s = b.stats || {};
+    var rows = [
+      ['最常见标题模式', ins.top_pattern || '—'],
+      ['最常见钩子',     ins.top_hook || '—'],
+      ['最强赛道',       ins.top_track || '—'],
+      ['最佳内容形式',   ins.dominant_format || '—'],
+      ['最佳发布时间',   (ins.best_day||'—') + ' ' + (ins.best_hour||'')],
+      ['爆款率',         fmt(s.hit_rate,1) + '%（≥' + fmt(s.hit_threshold||0) + '赞）'],
+      ['藏赞比',         fmt(s.sl_ratio,2) + ' → ' + (s.ratio_label||'—')],
+    ];
+    var html = '<table class="tbl"><tbody>';
+    rows.forEach(function(r) {
+      html += '<tr><td style="font-weight:500;">' + r[0] + '</td><td>' + esc(r[1]) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('burst-summary-table').innerHTML = html;
+  }
+
+  /* ============================================================
+     Section 4 — 发布时间 (Heatmap)
+     ============================================================ */
+  function renderHeatmaps() {
+    var bloggers = selected();
+    var area = document.getElementById('heatmap-area');
+    var tip = document.getElementById('tip');
+    area.innerHTML = '';
+
+    var hasEngagement = false;
+    bloggers.forEach(function(b) {
+      if (!b.heatmap) return;
+      var hm = b.heatmap;
+      if (!hm.matrix) return;
+
+      var maxv = hm.maxv || 1;
+      var bestDay = hm.best_day || '—';
+      var bestHour = hm.best_hour || '—';
+
+      // Build table
+      var thead = '<tr><th></th>' + hm.days.map(function(d){ return '<th>'+esc(d)+'</th>'; }).join('') + '</tr>';
+      var tbody = '';
+      hm.matrix.forEach(function(row, si) {
+        var cells = '';
+        row.forEach(function(v, di) {
+          if (v > 0) {
+            var isBest = (hm.days[di] === bestDay && hm.slots[si] === bestHour);
+            var a = v/maxv*0.7;
+            cells += '<td class="data'+(isBest?' best':'')+'" style="background:rgba(194,105,58,'+a.toFixed(2)+')" data-day="'+esc(hm.days[di])+'" data-slot="'+esc(hm.slots[si])+'" data-count="'+v+'">'+v+'</td>';
+          } else {
+            cells += '<td></td>';
+          }
+        });
+        tbody += '<tr><th>'+esc(hm.slots[si])+'</th>'+cells+'</tr>';
+      });
+
+      // Label
+      var title = hm.best_day && hm.best_hour && hm.best_day !== '—'
+        ? '最佳发布时段: ' + bestDay + ' ' + bestHour
+        : '发布时间分布';
+
+      var card = document.createElement('div');
+      card.className = 'card full';
+      card.style.marginTop = '14px';
+      card.innerHTML = '<div class="card-hd">🔥 ' + title + ' · ' + esc(b.name) + '</div>' +
+        '<div class="card-sub">星期 × 时间段热力图 &nbsp;|&nbsp; 共 ' + hm.matrix.reduce(function(s,r){ return s+r.reduce(function(a,v){return a+v;},0); },0) + ' 篇有发布时间的数据</div>' +
+        '<div class="hm-wrap"><table class="hm"><thead>'+thead+'</thead><tbody>'+tbody+'</tbody></table></div>';
+
+      // Tooltips
+      card.querySelectorAll('td.data').forEach(function(td) {
+        td.addEventListener('mouseenter', function() {
+          tip.textContent = td.dataset.day + ' ' + td.dataset.slot + ' · ' + td.dataset.count + ' 篇';
+          tip.classList.add('on');
+        });
+        td.addEventListener('mousemove', function(e) { tip.style.left = (e.clientX+12)+'px'; tip.style.top = (e.clientY-28)+'px'; });
+        td.addEventListener('mouseleave', function() { tip.classList.remove('on'); });
+      });
+
+      area.appendChild(card);
+    });
+
+    // Update description
+    var desc = document.getElementById('heatmap-desc');
+    // Check if engagement_matrix exists in the raw heatmap data
+    if (bloggers.length === 1 && bloggers[0].heatmap && bloggers[0].heatmap.best_day && bloggers[0].heatmap.best_day !== '—') {
+      desc.textContent = '基于全量笔记发布时间的分布统计 · 高亮格子为该博主发布最密集的时段';
+    } else if (bloggers.length === 0) {
+      desc.textContent = '暂无足够的发布时间数据';
+    } else {
+      desc.textContent = '基于全量笔记发布时间的分布统计（发布数量 ≠ 最佳表现时间，仅供参考发布习惯）';
+    }
+  }
+
+  /* ============================================================
+     Section 5 — 评论洞察
+     ============================================================ */
+  function renderSentiment() {
+    var bloggers = selected();
+    if (!bloggers.length) return;
+
+    // Sentiment bar
+    newChart('sentimentChart', 'bar', {
+      labels: ['正向', '中性', '负向'],
+      datasets: bloggers.map(function(b, i) {
+        var sen = b.sentiment || {};
+        return {
+          label: b.name,
+          data: [sen.avg_positive_pct||0, sen.avg_neutral_pct||0, sen.avg_negative_pct||0],
+          backgroundColor: ['#5C8D6E', '#C49B3F', '#B84A3C']
+        };
+      })
+    }, yPct());
+
+    // Comment examples (first blogger only)
+    var b = bloggers[0];
+    var sen = b.sentiment || {};
+    var pos = sen.positive_examples || [];
+    var neg = sen.negative_examples || [];
+    var total = sen.total_comments_analyzed || 0;
+
+    var posHtml = pos.length
+      ? pos.map(function(e){ return '<div class="comment-item">「' + esc(e) + '」</div>'; }).join('')
+      : '<div class="no-data">暂无正向评论样例</div>';
+    var negHtml = neg.length
+      ? neg.map(function(e){ return '<div class="comment-item">「' + esc(e) + '」</div>'; }).join('')
+      : '<div class="no-data">未检测到负向评论</div>';
+
+    document.getElementById('comment-examples').innerHTML =
+      '<div class="card"><div class="card-hd">💚 正向评论 · ' + esc(b.name) + '</div><div class="card-sub">共分析 ' + total + ' 条评论</div>' + posHtml + '</div>' +
+      '<div class="card"><div class="card-hd">⚠️ 需关注 · ' + esc(b.name) + '</div><div class="card-sub">负向评论</div>' + negHtml + '</div>';
+  }
+
+  /* ============================================================
+     Section 6 — AI 策略总结 (规则化)
+     ============================================================ */
+  function renderInsights() {
+    var bloggers = selected();
+    var b = bloggers[0];
+    if (!b) { document.getElementById('insights-content').innerHTML = '<div class="no-data">暂无数据</div>'; return; }
+
+    var ins = b.insights || {};
+    var s = b.stats || {};
+
+    if (!ins.has_enough_data) {
+      document.getElementById('insights-content').innerHTML =
+        '<div class="notice"><strong>样本不足</strong> — 当前笔记数量少于 5 篇，无法做出可靠策略结论。建议积累更多内容后再分析。</div>';
+      return;
+    }
+
+    var parts = [];
+
+    // 为什么容易出爆款
+    parts.push('<div class="insight-block"><h3>💡 为什么这个账号容易出爆款？</h3><ul>');
+    if (s.hit_rate > 10) {
+      parts.push('<li>爆款率高达 ' + fmt(s.hit_rate,1) + '%，内容质量稳定</li>');
+    } else if (s.hit_rate > 0) {
+      parts.push('<li>爆款率 ' + fmt(s.hit_rate,1) + '%，有明确的爆款方法论</li>');
+    } else {
+      parts.push('<li>当前未检测到爆款（≥' + fmt(s.hit_threshold||0) + '赞），可能处于账号冷启动阶段</li>');
+    }
+    if (s.sl_ratio > 0.3) {
+      parts.push('<li>藏赞比高达 ' + fmt(s.sl_ratio,2) + '，属于' + (s.ratio_label||'实用型') + '，内容有强收藏价值</li>');
+    } else if (s.sl_ratio > 0.1) {
+      parts.push('<li>藏赞比 ' + fmt(s.sl_ratio,2) + '，收藏与点赞均衡</li>');
+    }
+    if (s.sentiment_score > 0.3) {
+      parts.push('<li>评论情感偏正向（' + (s.sentiment_score>=0?'+':'') + fmt(s.sentiment_score,2) + '），受众认可度高</li>');
+    }
+    parts.push('</ul></div>');
+
+    // 内容优势
+    parts.push('<div class="insight-block"><h3>✅ 内容优势</h3><ul>');
+    parts.push('<li>最强赛道：' + esc(ins.top_track||'—') + '</li>');
+    parts.push('<li>最常用钩子：' + esc(ins.top_hook||'—') + '</li>');
+    parts.push('<li>标题偏好：' + esc(ins.top_pattern||'—') + ' 型标题</li>');
+    parts.push('<li>主要形式：' + esc(ins.dominant_format||'—') + '</li>');
+    if (ins.best_day && ins.best_day !== '—') {
+      parts.push('<li>主要发布窗口：' + esc(ins.best_day) + ' ' + esc(ins.best_hour||'') + '</li>');
+    }
+    parts.push('</ul></div>');
+
+    // 当前短板
+    parts.push('<div class="insight-block"><h3>⚠️ 当前短板</h3><ul>');
+    var hasWeakness = false;
+    if (s.normal_count === 0 && s.video_count > 0) {
+      parts.push('<li>内容形式单一：仅发布视频，缺少图文笔记覆盖</li>'); hasWeakness = true;
+    }
+    if (s.video_count === 0 && s.normal_count > 0) {
+      parts.push('<li>内容形式单一：仅发布图文，可尝试视频提升互动</li>'); hasWeakness = true;
+    }
+    if (s.sl_ratio < 0.1) {
+      parts.push('<li>收藏驱动力弱：藏赞比偏低，内容偏情绪/观赏型，缺乏实用价值</li>'); hasWeakness = true;
+    }
+    if (s.sentiment_score < 0) {
+      parts.push('<li>评论情感偏负向，建议关注评论区高频问题</li>'); hasWeakness = true;
+    }
+    if (s.freq_label && (s.freq_label.indexOf('低频') >= 0 || s.freq_label === '双周更')) {
+      parts.push('<li>更新频率偏低（' + esc(s.freq_label) + '），建议提升至周更以上维持算法权重</li>'); hasWeakness = true;
+    }
+    if (!hasWeakness) {
+      parts.push('<li>当前数据未显示明显短板，各项指标较为均衡</li>');
+    }
+    parts.push('</ul></div>');
+
+    // 模仿建议
+    parts.push('<div class="insight-block"><h3>🎯 如果要模仿，建议：</h3><ul>');
+    parts.push('<li>1. 标题主攻「' + esc(ins.top_pattern||'—') + '」模式，辅以' + esc(ins.top_hook||'—') + '类钩子开场</li>');
+    parts.push('<li>2. 内容聚焦「' + esc(ins.top_track||'—') + '」赛道，做到该领域的信息密度领先</li>');
+    parts.push('<li>3. 保持' + esc(ins.dominant_format||'—') + '为主要形式，辅以另一种格式做测试</li>');
+    if (ins.best_day && ins.best_day !== '—') {
+      parts.push('<li>4. 优先在' + esc(ins.best_day) + ' ' + esc(ins.best_hour||'') + '发布新内容</li>');
+    }
+    parts.push('<li>5. 控制' + (s.ratio_label||'实用型') + '的内容比例，维持藏赞比在 ' + fmt(s.sl_ratio,2) + ' 左右</li>');
+    parts.push('</ul></div>');
+
+    document.getElementById('insights-content').innerHTML = '<div class="insight-grid">' + parts.join('') + '</div>';
+  }
+
+  /* ============================================================
+     Navigation
+     ============================================================ */
+  function initNav() {
+    var sections = document.querySelectorAll('section[id]');
+    var btns = document.querySelectorAll('.tab-btn');
+    var tabNav = document.getElementById('tab-nav');
+
+    var obs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (e.isIntersecting) {
+          btns.forEach(function(b){ b.classList.remove('active'); });
+          var t = document.querySelector('.tab-btn[href="#'+e.target.id+'"]');
+          if (t) t.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-30% 0px -60% 0px' });
+    sections.forEach(function(s){ obs.observe(s); });
+  }
+
+  /* ============================================================
+     Refresh everything (called on blogger switch)
+     ============================================================ */
+  function refreshAll() {
+    destroyCharts();
+    renderKPI();
+    renderOverview();
+    renderStrategy();
+    renderViral();
+    renderHeatmaps();
+    renderSentiment();
+    renderInsights();
+  }
+
+  /* ============================================================
+     Bootstrap
+     ============================================================ */
+  if (!PAYLOAD || !PAYLOAD.bloggers || !PAYLOAD.bloggers.length) {
+    document.body.innerHTML = '<div style="max-width:600px;margin:60px auto;padding:30px;text-align:center;font-family:sans-serif;">' +
+      '<h2 style="color:var(--text-secondary)">暂无数据</h2>' +
+      '<p style="color:var(--text-muted);margin-top:8px;">未找到可渲染的分析数据。请先运行数据采集与分析流程。</p>' +
+      '<p style="color:var(--text-muted);font-size:12px;">python run.py "博主名"</p>' +
+    '</div>';
+  } else {
+    document.addEventListener('DOMContentLoaded', function() {
+      renderHeader();
+      renderSwitcher();
+      refreshAll();
+      initNav();
+    });
+  }
+
+})();
+</script>
+
+</body>
+</html>

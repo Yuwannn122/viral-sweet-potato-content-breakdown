@@ -2173,3 +2173,17 @@ def deep_analyze(analysis_path, nickname, output_dir, notes_details_path=None):
     print(f'  Prompt: {prompt_path}')
     print(f'\nDone: {len(results)}/4 docs')
     return {'docs': results, 'prompt_path': prompt_path}
+
+
+if __name__ == "__main__":
+    import argparse as _ap
+    if sys.platform == "win32":
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    _parser = _ap.ArgumentParser(description="AI深度分析")
+    _parser.add_argument("analysis_path", help="分析数据JSON路径")
+    _parser.add_argument("nickname", help="博主昵称")
+    _parser.add_argument("-o", "--output", default="./output", help="输出目录")
+    _parser.add_argument("--details", help="原始详情JSON路径")
+    _args = _parser.parse_args()
+    deep_analyze(_args.analysis_path, _args.nickname, _args.output, _args.details)
